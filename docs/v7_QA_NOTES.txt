@@ -1,0 +1,20 @@
+Getitech Canvas v7 — QA validation
+
+PASS — Manage boards visible button
+PASS — Independent board scrolling
+PASS — Group/Ungroup controls
+PASS — Checklist tool
+PASS — Dot voting tool
+PASS — AI quiz
+PASS — Eraser clear actions
+PASS — Timer stop closes UI
+PASS — Template fit-to-view
+PASS — Ink over cards CSS
+PASS — Background presets
+
+Additional validation
+PASS — JavaScript syntax checked with Node.js.
+PASS — Every scripted getElementById reference maps to an element in the document.
+
+Portable storage note
+No hard-coded board limit. Capacity is browser-dependent, and pasted images are the largest factor. v7 displays a warning when the serialized workspace becomes large.

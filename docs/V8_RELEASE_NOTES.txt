@@ -1,0 +1,61 @@
+HuddleCanvas v8 by GETITECH — Portable Research Build
+
+WORKING PRODUCT NAME
+HuddleCanvas is a working name chosen to communicate collaborative visual work.
+Run a formal trademark/domain clearance before public commercial launch.
+
+WHAT IS NEW IN V8
+- Bulk board management: select multiple boards, duplicate or delete them together.
+- HuddleCanvas product identity with a stronger display name and refined typography.
+- Lasso selection: drag on empty canvas with Select to select many objects.
+- More visible Group / Ungroup contextual actions.
+- Selection actions: auto arrange, resize, rotate, comment, duplicate, delete.
+- Smart movement snapping to a grid and nearby object positions.
+- Shape library popover: rectangle, rounded rectangle, ellipse, triangle, diamond, hexagon, star and arrow/connector.
+- Frame tool + local presentation mode.
+- Workspace search across board titles and object text.
+- Named version checkpoints with restore.
+- Local comments and @mentions prototype.
+- Facilitation center: private brainstorm prototype, reveal, reset votes.
+- Vote mode guidance: click a card to add a vote; Shift-click removes one.
+- Checklist mode guidance and editable checklist cards.
+- Custom background color now live-previews and commits correctly.
+- AI actions can summarize selected content and create quizzes from selected board content.
+- Collaboration center describes hosted capabilities without faking a realtime backend.
+
+VOTE
+1. Choose Vote in the left toolbar.
+2. Click a sticky note, action card, checklist, quiz, frame or other card.
+3. A visible vote count appears on that object.
+4. Shift-click the object to remove a vote.
+5. Facilitate > Reset votes clears all board votes.
+
+GROUP / UNGROUP
+1. Choose Select.
+2. Drag a lasso around several objects, or Shift-click their drag handles.
+3. The Selection toolbar appears at the top.
+4. Choose Group. Moving any grouped item moves the group.
+5. Select a grouped item and choose Ungroup to separate them.
+
+CHECKLIST
+1. Choose Checklist.
+2. Click the canvas.
+3. Edit the card title and rows directly.
+4. Check items as they are completed; use + Add item for more rows.
+
+AI QUIZ
+The portable build creates simple local quiz cards from visible/selected board text.
+A hosted AI backend can later generate semantic questions, distractors, explanations,
+difficulty levels, scoring and source-aware quizzes from board content and uploaded files.
+
+HOSTED-ONLY MILESTONES
+These are intentionally not faked in this portable build:
+- Realtime cursors and multi-user sync
+- Guest collaboration links and permissions
+- Facilitator “bring everyone to me” viewport sync
+- Cloud notifications and presence
+- Direct PDF page rendering/import (requires a PDF renderer or server conversion service)
+- Production generative AI (requires a secure server-side AI gateway)
+
+OPEN
+Double-click index.html in a current browser. No installation is required for this portable build.

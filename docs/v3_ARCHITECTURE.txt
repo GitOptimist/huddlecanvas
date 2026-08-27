@@ -1,0 +1,62 @@
+FLOWBOARD STUDIO V3 — PRODUCT ARCHITECTURE
+
+CURRENT PORTABLE BUILD
+- Single-file browser app
+- Local multi-board workspace
+- Vector drawing history
+- Company white-label branding
+- Editable .flowboard export/import
+- PNG export
+- Full-screen animated break/focus timer
+- AI Copilot panel with local productivity actions
+- Templates, action cards, focus mode, command palette
+
+PRODUCTION ARCHITECTURE
+1. Frontend
+   React/TypeScript + canvas rendering layer (tldraw-style scene graph or custom)
+   Design system with desktop/tablet/touch modes.
+
+2. Realtime collaboration
+   WebSocket service + CRDT/Yjs-style shared document model.
+   Presence, live cursors, selections, comments, permissions and conflict-free editing.
+
+3. Backend
+   API service for users, organizations, boards, templates, permissions and billing.
+   PostgreSQL for product data; object storage for images/PDFs/exports.
+   Redis or equivalent for realtime presence and queues.
+
+4. AI
+   Server-side AI gateway. Never put provider API keys in the browser.
+   Board context service converts selected frames/notes/actions into structured context.
+   Tools: summarize, cluster, rewrite, extract actions, create workshop plans, generate diagrams,
+   answer questions about uploaded files, and convert meetings into decisions/actions.
+
+5. Billing
+   Support subscriptions and one-time purchases.
+   Webhook-driven entitlements: Free / Pro / Team / Business.
+   Keep billing provider separate from product permissions.
+
+6. Desktop
+   Keep the web product as the canonical codebase.
+   Package the same frontend for Windows and macOS with Tauri or Electron.
+   Add auto-updates, native file open/save, deep links and OS notifications.
+
+7. Security / enterprise
+   Org workspaces, SSO/SAML, MFA, audit log, data export/deletion, retention policies,
+   encryption, rate limiting, content access controls, signed desktop builds.
+
+PRODUCTIVITY FEATURES TO PRIORITIZE
+- Select/lasso, resize, group, align, distribute, lock and layers
+- Frames / presentation mode
+- Search across boards
+- Voting / dot voting
+- Comments, @mentions and follow-up notifications
+- Structured action cards with owner, due date and status
+- Meeting agenda -> brainstorm -> vote -> decisions -> actions workflow
+- Image/PDF/file drag-drop
+- Version history and named checkpoints
+- Template library
+- Board links and backlinks
+- AI-generated summaries and action lists
+- Guest links with view/comment/edit permissions
+- Offline mode + sync

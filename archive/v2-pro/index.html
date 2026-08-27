@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FlowBoard Pro</title>
+<style>
+:root{
+  --bg:#f7f8fb; --panel:#fff; --border:#e5e7eb; --text:#111827; --muted:#6b7280;
+  --brand:#2563eb; --brand2:#7c3aed; --shadow:0 12px 30px rgba(17,24,39,.13);
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:var(--bg)}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+.app{position:relative;width:100%;height:100%}
+#boardWrap{
+  position:absolute;inset:0;overflow:hidden;background-color:#fff;touch-action:none;
+  --grid-size:24px;
+  background-image:linear-gradient(#eef1f5 1px,transparent 1px),linear-gradient(90deg,#eef1f5 1px,transparent 1px);
+  background-size:var(--grid-size) var(--grid-size);
+}
+#boardWrap.noGrid{background-image:none}
+#world{position:absolute;left:0;top:0;transform-origin:0 0;width:3200px;height:2200px}
+canvas{position:absolute;left:0;top:0;width:3200px;height:2200px;touch-action:none}
+#drawCanvas{z-index:1}
+#previewCanvas{z-index:2;pointer-events:none}
+#objects{position:absolute;inset:0;z-index:3;pointer-events:none}
+.topbar{
+  position:absolute;left:14px;top:12px;right:14px;z-index:20;
+  display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.97);
+  border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:8px 9px;
+  overflow-x:auto;scrollbar-width:none
+}
+.topbar::-webkit-scrollbar{display:none}
+.brandBox{display:flex;align-items:center;gap:9px;min-width:max-content}
+#brandLogo{
+  width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+  display:grid;place-items:center;color:white;font-size:16px;font-weight:800;overflow:hidden;flex:0 0 auto
+}
+#brandLogo img{width:100%;height:100%;object-fit:cover}
+#companyName{font-weight:800;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+#boardTitle{
+  width:190px;border:1px solid transparent;border-radius:8px;padding:7px 8px;background:transparent;font-weight:650;
+}
+#boardTitle:hover,#boardTitle:focus{border-color:var(--border);background:#fafafa;outline:none}
+.divider{height:28px;width:1px;background:var(--border);margin:0 2px;flex:0 0 auto}
+.toolBtn,.actionBtn{
+  height:38px;min-width:38px;border:0;border-radius:9px;background:#fff;color:#374151;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 10px;white-space:nowrap
+}
+.toolBtn:hover,.actionBtn:hover{background:#f3f4f6}
+.toolBtn.active{background:#e8f0ff;color:#1d4ed8;box-shadow:inset 0 0 0 1px #c7dbff}
+.floating{
+  position:absolute;left:50%;bottom:17px;transform:translateX(-50%);z-index:20;
+  display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,.97);
+  border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);max-width:calc(100vw - 160px);
+  overflow-x:auto;scrollbar-width:none
+}
+.floating::-webkit-scrollbar{display:none}
+.palette{display:flex;gap:5px;align-items:center}
+.swatch{
+  width:27px;height:27px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #cbd5e1;flex:0 0 auto
+}
+.swatch.active{box-shadow:0 0 0 3px #93c5fd}
+#customColor{appearance:none;width:36px;height:36px;padding:3px;border:1px solid var(--border);border-radius:9px;background:white}
+.rangeWrap{display:flex;align-items:center;gap:7px;padding:0 5px;white-space:nowrap}
+.rangeWrap label{font-size:12px;color:var(--muted)}
+#size{width:90px}
+.zoomPanel{
+  position:absolute;right:14px;bottom:17px;z-index:20;display:flex;align-items:center;gap:3px;padding:6px;
+  border-radius:12px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow)
+}
+.zoomPanel button{width:34px;height:34px;border:0;background:#fff;border-radius:8px}
+.zoomPanel button:hover{background:#f3f4f6}
+#zoomLabel{width:52px;text-align:center;font-size:13px;color:#4b5563}
+.status{
+  position:absolute;left:14px;bottom:17px;z-index:15;font-size:12px;color:#6b7280;background:rgba(255,255,255,.88);
+  border:1px solid #eee;padding:7px 10px;border-radius:9px
+}
+.sticky{
+  position:absolute;width:220px;min-height:155px;padding:13px;border-radius:9px;
+  box-shadow:0 8px 22px rgba(0,0,0,.14);background:#fff2a8;pointer-events:auto;user-select:none
+}
+.sticky.dragging{opacity:.9}
+.sticky textarea{
+  width:100%;min-height:112px;resize:none;border:0;outline:0;background:transparent;
+  font-size:16px;line-height:1.4;color:#3f3a25;user-select:text
+}
+.objTop{display:flex;justify-content:flex-end;gap:5px;margin:-6px -6px 3px 0}
+.mini{width:25px;height:25px;border:0;border-radius:7px;background:rgba(255,255,255,.5)}
+.textObj{
+  position:absolute;min-width:80px;min-height:30px;padding:4px 6px;font-size:22px;
+  outline:1px dashed transparent;pointer-events:auto;user-select:text;white-space:pre-wrap;border-radius:4px
+}
+.textObj:focus{outline-color:#60a5fa;background:rgba(255,255,255,.8)}
+.modalShade{
+  position:absolute;inset:0;z-index:50;background:rgba(17,24,39,.32);display:none;align-items:center;justify-content:center;padding:18px
+}
+.modalShade.show{display:flex}
+.modal{
+  width:min(560px,100%);max-height:84vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.25);padding:20px
+}
+.modal h2{margin:0 0 5px;font-size:21px}
+.modal p{margin:0 0 17px;color:#6b7280;font-size:13px}
+.field{margin:12px 0}
+.field label{display:block;font-size:12px;font-weight:700;color:#4b5563;margin-bottom:6px}
+.field input[type="text"],.field select{
+  width:100%;height:40px;border:1px solid var(--border);border-radius:9px;padding:0 10px;outline:none
+}
+.field input:focus,.field select:focus{border-color:#93c5fd;box-shadow:0 0 0 3px #dbeafe}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modalActions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.primary{background:var(--brand)!important;color:white!important}
+.templateGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.templateCard{
+  border:1px solid var(--border);border-radius:11px;background:#fff;padding:12px;text-align:left
+}
+.templateCard:hover{border-color:#93c5fd;background:#f8fbff}
+.templateCard b{display:block;margin-bottom:4px}
+.templateCard span{font-size:12px;color:#6b7280}
+.timer{
+  position:absolute;right:14px;top:72px;z-index:18;background:white;border:1px solid var(--border);border-radius:12px;
+  box-shadow:var(--shadow);padding:8px 10px;display:none;align-items:center;gap:7px
+}
+.timer.show{display:flex}
+#timerValue{font-variant-numeric:tabular-nums;font-weight:800;min-width:56px;text-align:center}
+.timer button{border:0;border-radius:7px;background:#f3f4f6;padding:7px 9px}
+@media(max-width:900px){
+  #companyName{display:none} #boardTitle{width:130px}.toolBtn span,.actionBtn span{display:none}
+  .floating{left:8px;right:8px;transform:none;max-width:none}.status{display:none}.zoomPanel{display:none}
+  .row,.templateGrid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="boardWrap">
+    <div id="world">
+      <canvas id="drawCanvas" width="3200" height="2200"></canvas>
+      <canvas id="previewCanvas" width="3200" height="2200"></canvas>
+      <div id="objects"></div>
+    </div>
+  </div>
+
+  <div class="topbar">
+    <div class="brandBox">
+      <div id="brandLogo">✦</div>
+      <span id="companyName">FlowBoard</span>
+    </div>
+    <input id="boardTitle" value="Untitled Board" aria-label="Board title" />
+    <div class="divider"></div>
+
+    <button class="toolBtn active" data-tool="pen" title="Pen (P)">✎ <span>Pen</span></button>
+    <button class="toolBtn" data-tool="highlighter" title="Highlighter (H)">▰ <span>Highlight</span></button>
+    <button class="toolBtn" data-tool="eraser" title="Eraser (E)">⌫ <span>Eraser</span></button>
+    <button class="toolBtn" data-tool="line" title="Line (L)">╱ <span>Line</span></button>
+    <button class="toolBtn" data-tool="rect" title="Rectangle (R)">▭ <span>Rect</span></button>
+    <button class="toolBtn" data-tool="ellipse" title="Ellipse (O)">◯ <span>Ellipse</span></button>
+    <button class="toolBtn" data-tool="text" title="Text (T)">T <span>Text</span></button>
+    <button class="toolBtn" data-tool="sticky" title="Sticky note (S)">▣ <span>Sticky</span></button>
+    <button class="toolBtn" data-tool="pan" title="Pan (V / space-drag)">✋ <span>Pan</span></button>
+
+    <div class="divider"></div>
+    <button id="templatesBtn" class="actionBtn" title="Templates">▦ <span>Templates</span></button>
+    <button id="timerBtn" class="actionBtn" title="Meeting timer">⏱ <span>Timer</span></button>
+    <button id="undo" class="actionBtn" title="Undo (Ctrl/Cmd+Z)">↶ <span>Undo</span></button>
+    <button id="redo" class="actionBtn" title="Redo (Ctrl/Cmd+Shift+Z)">↷ <span>Redo</span></button>
+    <button id="gridBtn" class="actionBtn" title="Toggle grid"># <span>Grid</span></button>
+    <button id="saveBoard" class="actionBtn" title="Download editable board file">⇩ <span>Board</span></button>
+    <button id="openBoard" class="actionBtn" title="Open editable board file">⇧ <span>Open</span></button>
+    <button id="exportPng" class="actionBtn" title="Export PNG">▧ <span>PNG</span></button>
+    <button id="settingsBtn" class="actionBtn" title="Company branding">⚙ <span>Brand</span></button>
+    <button id="clear" class="actionBtn" title="Clear board">⌧ <span>Clear</span></button>
+  </div>
+
+  <div class="floating">
+    <div id="palette" class="palette"></div>
+    <input id="customColor" type="color" value="#111827" title="Custom color" />
+    <div class="divider"></div>
+    <div class="rangeWrap"><label for="size">Stroke</label><input id="size" type="range" min="1" max="32" value="4" /><span id="sizeLabel">4</span></div>
+  </div>
+
+  <div class="zoomPanel">
+    <button id="zoomOut">−</button><div id="zoomLabel">100%</div><button id="zoomIn">+</button><button id="resetView" title="Reset view">⌂</button>
+  </div>
+  <div class="status" id="status">Autosaved locally</div>
+
+  <div class="timer" id="timerPanel">
+    <button data-min="5">5m</button><button data-min="10">10m</button><button data-min="25">25m</button>
+    <span id="timerValue">00:00</span><button id="timerStop">Stop</button>
+  </div>
+
+  <div class="modalShade" id="brandModal">
+    <div class="modal">
+      <h2>Company branding</h2>
+      <p>Saved locally in this browser and included in exported board files.</p>
+      <div class="field"><label>Company / team name</label><input id="companyInput" type="text" placeholder="Acme Strategy Team" /></div>
+      <div class="row">
+        <div class="field"><label>Primary color</label><input id="brand1Input" type="color" value="#2563eb" /></div>
+        <div class="field"><label>Secondary color</label><input id="brand2Input" type="color" value="#7c3aed" /></div>
+      </div>
+      <div class="field"><label>Logo image (optional)</label><input id="logoInput" type="file" accept="image/*" /></div>
+      <div class="field"><label>Brand palette — comma-separated hex colors</label><input id="paletteInput" type="text" value="#111827,#2563eb,#7c3aed,#dc2626,#059669,#d97706,#db2777,#0891b2" /></div>
+      <div class="modalActions"><button class="actionBtn" id="brandCancel">Cancel</button><button class="actionBtn primary" id="brandSave">Save branding</button></div>
+    </div>
+  </div>
+
+  <div class="modalShade" id="templateModal">
+    <div class="modal">
+      <h2>Start from a template</h2>
+      <p>Templates add structure without locking you into a format.</p>
+      <div class="templateGrid">
+        <button class="templateCard" data-template="kanban"><b>Kanban</b><span>To do · Doing · Done</span></button>
+        <button class="templateCard" data-template="retro"><b>Retrospective</b><span>Went well · Improve · Actions</span></button>
+        <button class="templateCard" data-template="matrix"><b>2×2 Matrix</b><span>Prioritize by two dimensions</span></button>
+        <button class="templateCard" data-template="agenda"><b>Meeting Agenda</b><span>Topics · decisions · owners</span></button>
+        <button class="templateCard" data-template="swot"><b>SWOT</b><span>Strengths · weaknesses · opportunities · threats</span></button>
+        <button class="templateCard" data-template="brainstorm"><b>Brainstorm</b><span>Prompt in the center, ideas around it</span></button>
+      </div>
+      <div class="modalActions"><button class="actionBtn" id="templateClose">Close</button></div>
+    </div>
+  </div>
+
+  <input id="fileOpen" type="file" accept=".flowboard,.json,application/json" hidden />
+</div>
+
+<script>
+(() => {
+  const BOARD_W=3200, BOARD_H=2200;
+  const wrap=document.getElementById('boardWrap'), world=document.getElementById('world');
+  const canvas=document.getElementById('drawCanvas'), preview=document.getElementById('previewCanvas');
+  const ctx=canvas.getContext('2d'), pctx=preview.getContext('2d'), objects=document.getElementById('objects');
+  const customColor=document.getElementById('customColor'), sizeInput=document.getElementById('size'), sizeLabel=document.getElementById('sizeLabel');
+  const paletteEl=document.getElementById('palette'), boardTitle=document.getElementById('boardTitle'), status=document.getElementById('status');
+  const zoomLabel=document.getElementById('zoomLabel');
+
+  let tool='pen', selectedColor='#111827', drawing=false, start=null, last=null;
+  let currentStroke=null, spaceDown=false, panning=false, panStart=null, viewStart=null;
+  let scale=1, tx=0, ty=0, rafPending=false, queuedPoints=[];
+  let timerHandle=null, timerEnd=0;
+
+  const state={
+    version:2,
+    title:'Untitled Board',
+    ops:[],
+    items:[],
+    branding:{
+      company:'FlowBoard',
+      brand1:'#2563eb',
+      brand2:'#7c3aed',
+      logoData:'',
+      palette:['#111827','#2563eb','#7c3aed','#dc2626','#059669','#d97706','#db2777','#0891b2']
+    },
+    grid:true
+  };
+  let undoStack=[], redoStack=[];
+  const MAX_HISTORY=60;
+
+  ctx.lineCap=pctx.lineCap='round'; ctx.lineJoin=pctx.lineJoin='round';
+
+  function cloneState(){
+    return JSON.parse(JSON.stringify({
+      title:state.title,ops:state.ops,items:state.items,branding:state.branding,grid:state.grid
+    }));
+  }
+  function pushHistory(){
+    undoStack.push(cloneState());
+    if(undoStack.length>MAX_HISTORY) undoStack.shift();
+    redoStack=[];
+  }
+  function restoreSnapshot(s){
+    state.title=s.title;state.ops=s.ops;state.items=s.items;state.branding=s.branding;state.grid=s.grid;
+    renderAll(); autosave();
+  }
+  function undo(){
+    if(!undoStack.length)return;
+    redoStack.push(cloneState()); restoreSnapshot(undoStack.pop());
+  }
+  function redo(){
+    if(!redoStack.length)return;
+    undoStack.push(cloneState()); restoreSnapshot(redoStack.pop());
+  }
+
+  function setTool(next){
+    tool=next;
+    document.querySelectorAll('.toolBtn').forEach(b=>b.classList.toggle('active',b.dataset.tool===next));
+    canvas.style.cursor=next==='text'?'text':next==='sticky'?'copy':next==='pan'?'grab':next==='eraser'?'cell':'crosshair';
+  }
+
+  document.querySelectorAll('.toolBtn').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+
+  function screenToWorld(clientX,clientY){
+    const r=wrap.getBoundingClientRect();
+    return {x:(clientX-r.left-tx)/scale,y:(clientY-r.top-ty)/scale};
+  }
+  function applyView(){
+    world.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+    zoomLabel.textContent=Math.round(scale*100)+'%';
+  }
+  function zoomAt(factor,cx=wrap.clientWidth/2,cy=wrap.clientHeight/2){
+    const old=scale;
+    scale=Math.min(3,Math.max(.25,scale*factor));
+    const wx=(cx-tx)/old, wy=(cy-ty)/old;
+    tx=cx-wx*scale;ty=cy-wy*scale;applyView();
+  }
+
+  function rgba(hex,a){
+    const n=parseInt(hex.slice(1),16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+  }
+  function drawOp(c,op){
+    c.save();c.lineCap='round';c.lineJoin='round';
+    if(op.type==='stroke'){
+      c.globalCompositeOperation=op.mode==='erase'?'destination-out':'source-over';
+      c.strokeStyle=op.mode==='highlight'?rgba(op.color,.3):op.color;
+      c.lineWidth=op.mode==='highlight'?Math.max(12,op.size*4):op.mode==='erase'?Math.max(14,op.size*3):op.size;
+      if(op.points.length){
+        c.beginPath();c.moveTo(op.points[0].x,op.points[0].y);
+        for(let i=1;i<op.points.length;i++)c.lineTo(op.points[i].x,op.points[i].y);
+        c.stroke();
+      }
+    } else {
+      c.globalCompositeOperation='source-over';c.strokeStyle=op.color;c.lineWidth=op.size;c.beginPath();
+      const {x1,y1,x2,y2}=op;
+      if(op.type==='line'){c.moveTo(x1,y1);c.lineTo(x2,y2)}
+      if(op.type==='rect')c.rect(x1,y1,x2-x1,y2-y1);
+      if(op.type==='ellipse')c.ellipse((x1+x2)/2,(y1+y2)/2,Math.abs(x2-x1)/2,Math.abs(y2-y1)/2,0,0,Math.PI*2);
+      c.stroke();
+    }
+    c.restore();
+  }
+  function redrawCanvas(){
+    ctx.clearRect(0,0,BOARD_W,BOARD_H);
+    state.ops.forEach(op=>drawOp(ctx,op));
+  }
+  function renderItems(){
+    objects.innerHTML='';
+    state.items.forEach(item=>{
+      if(item.type==='sticky'){
+        const el=document.createElement('div');el.className='sticky';el.dataset.id=item.id;
+        el.style.left=item.x+'px';el.style.top=item.y+'px';el.style.background=item.bg||'#fff2a8';
+        el.innerHTML=`<div class="objTop"><button class="mini noteColor" title="Change note color">◐</button><button class="mini deleteItem" title="Delete">×</button></div><textarea placeholder="Type a note..."></textarea>`;
+        el.querySelector('textarea').value=item.text||'';
+        objects.appendChild(el);bindSticky(el,item);
+      } else if(item.type==='text'){
+        const el=document.createElement('div');el.className='textObj';el.dataset.id=item.id;el.contentEditable='true';
+        el.style.left=item.x+'px';el.style.top=item.y+'px';el.style.color=item.color||'#111827';el.innerText=item.text||'Type here';
+        objects.appendChild(el);bindText(el,item);
+      }
+    });
+  }
+  function renderBrand(){
+    const b=state.branding;
+    document.documentElement.style.setProperty('--brand',b.brand1);
+    document.documentElement.style.setProperty('--brand2',b.brand2);
+    document.getElementById('companyName').textContent=b.company||'FlowBoard';
+    const logo=document.getElementById('brandLogo');
+    logo.innerHTML=b.logoData?`<img src="${b.logoData}" alt="">`:'✦';
+    boardTitle.value=state.title;
+    wrap.classList.toggle('noGrid',!state.grid);
+    renderPalette();
+  }
+  function renderAll(){redrawCanvas();renderItems();renderBrand();}
+
+  function autosave(){
+    try{
+      localStorage.setItem('flowboard-pro-v2',JSON.stringify(cloneState()));
+      status.textContent='Autosaved locally';
+      clearTimeout(autosave._t); autosave._t=setTimeout(()=>status.textContent='All changes saved',700);
+    }catch(e){status.textContent='Local autosave unavailable'}
+  }
+  function loadAutosave(){
+    try{
+      const raw=localStorage.getItem('flowboard-pro-v2'); if(!raw)return;
+      const s=JSON.parse(raw);
+      if(s&&Array.isArray(s.ops)&&Array.isArray(s.items))restoreSnapshot(s);
+    }catch(e){}
+  }
+
+  function renderPalette(){
+    paletteEl.innerHTML='';
+    (state.branding.palette||[]).slice(0,12).forEach(col=>{
+      const b=document.createElement('button');b.className='swatch'+(col.toLowerCase()===selectedColor.toLowerCase()?' active':'');
+      b.style.background=col;b.title=col;b.onclick=()=>{selectedColor=col;customColor.value=col;renderPalette()};
+      paletteEl.appendChild(b);
+    });
+  }
+  customColor.oninput=()=>{selectedColor=customColor.value;renderPalette()};
+  sizeInput.oninput=()=>sizeLabel.textContent=sizeInput.value;
+
+  function queuePoint(p){
+    queuedPoints.push(p);
+    if(rafPending)return;rafPending=true;
+    requestAnimationFrame(()=>{
+      rafPending=false;
+      if(!drawing||!currentStroke){queuedPoints=[];return}
+      const pts=queuedPoints.splice(0);
+      if(!pts.length)return;
+      ctx.save();
+      ctx.globalCompositeOperation=currentStroke.mode==='erase'?'destination-out':'source-over';
+      ctx.strokeStyle=currentStroke.mode==='highlight'?rgba(currentStroke.color,.3):currentStroke.color;
+      ctx.lineWidth=currentStroke.mode==='highlight'?Math.max(12,currentStroke.size*4):currentStroke.mode==='erase'?Math.max(14,currentStroke.size*3):currentStroke.size;
+      ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(last.x,last.y);
+      pts.forEach(pt=>{ctx.lineTo(pt.x,pt.y);currentStroke.points.push(pt);last=pt});
+      ctx.stroke();ctx.restore();
+    });
+  }
+
+  wrap.addEventListener('pointerdown',e=>{
+    if(e.button!==0)return;
+    const wantsPan=tool==='pan'||spaceDown;
+    if(wantsPan){
+      panning=true;panStart={x:e.clientX,y:e.clientY};viewStart={tx,ty};wrap.setPointerCapture(e.pointerId);canvas.style.cursor='grabbing';return;
+    }
+    if(e.target!==canvas)return;
+    const p=screenToWorld(e.clientX,e.clientY);
+    if(tool==='sticky'){pushHistory();addSticky(p);autosave();return}
+    if(tool==='text'){pushHistory();addText(p);autosave();return}
+    if(['pen','highlighter','eraser'].includes(tool)){
+      pushHistory();drawing=true;last=p;
+      currentStroke={type:'stroke',mode:tool==='eraser'?'erase':tool==='highlighter'?'highlight':'pen',color:selectedColor,size:Number(sizeInput.value),points:[p]};
+      canvas.setPointerCapture(e.pointerId);return;
+    }
+    if(['line','rect','ellipse'].includes(tool)){
+      pushHistory();drawing=true;start=p;canvas.setPointerCapture(e.pointerId);return;
+    }
+  });
+
+  wrap.addEventListener('pointermove',e=>{
+    if(panning){
+      tx=viewStart.tx+(e.clientX-panStart.x);ty=viewStart.ty+(e.clientY-panStart.y);applyView();return;
+    }
+    if(!drawing)return;
+    if(currentStroke){
+      const events=e.getCoalescedEvents?e.getCoalescedEvents():[e];
+      events.forEach(ev=>queuePoint(screenToWorld(ev.clientX,ev.clientY)));
+      return;
+    }
+    const p=screenToWorld(e.clientX,e.clientY);
+    pctx.clearRect(0,0,BOARD_W,BOARD_H);
+    drawOp(pctx,{type:tool,color:selectedColor,size:Number(sizeInput.value),x1:start.x,y1:start.y,x2:p.x,y2:p.y});
+  });
+
+  wrap.addEventListener('pointerup',e=>{
+    if(panning){panning=false;canvas.style.cursor=tool==='pan'?'grab':'crosshair';return}
+    if(!drawing)return;
+    const end=screenToWorld(e.clientX,e.clientY);
+    if(currentStroke){
+      if(currentStroke.points.length===1)currentStroke.points.push(end);
+      state.ops.push(currentStroke);currentStroke=null;
+    }else if(start){
+      pctx.clearRect(0,0,BOARD_W,BOARD_H);
+      state.ops.push({type:tool,color:selectedColor,size:Number(sizeInput.value),x1:start.x,y1:start.y,x2:end.x,y2:end.y});
+    }
+    drawing=false;start=null;queuedPoints=[];redrawCanvas();autosave();
+  });
+
+  function addSticky(p, seed={text:'',bg:'#fff2a8'}){
+    const item={id:cryptoId(),type:'sticky',x:p.x,y:p.y,text:seed.text||'',bg:seed.bg||'#fff2a8'};
+    state.items.push(item);renderItems();
+    setTimeout(()=>objects.querySelector(`[data-id="${item.id}"] textarea`)?.focus(),0);
+  }
+  function bindSticky(el,item){
+    const palette=['#fff2a8','#ffd9e8','#d8f3dc','#dbeafe','#ede9fe','#ffe4c7'];
+    let drag=null;
+    el.querySelector('.deleteItem').onclick=e=>{e.stopPropagation();pushHistory();state.items=state.items.filter(x=>x.id!==item.id);renderItems();autosave()};
+    el.querySelector('.noteColor').onclick=e=>{
+      e.stopPropagation();pushHistory();const idx=Math.max(0,palette.indexOf(item.bg));item.bg=palette[(idx+1)%palette.length];renderItems();autosave()
+    };
+    const ta=el.querySelector('textarea');
+    ta.oninput=()=>{item.text=ta.value;debouncedAutosave()};
+    el.addEventListener('pointerdown',e=>{
+      if(e.target.tagName==='TEXTAREA'||e.target.tagName==='BUTTON')return;
+      e.stopPropagation();pushHistory();drag={x:e.clientX,y:e.clientY,left:item.x,top:item.y};el.setPointerCapture(e.pointerId);el.classList.add('dragging')
+    });
+    el.addEventListener('pointermove',e=>{
+      if(!drag)return;item.x=drag.left+(e.clientX-drag.x)/scale;item.y=drag.top+(e.clientY-drag.y)/scale;el.style.left=item.x+'px';el.style.top=item.y+'px'
+    });
+    el.addEventListener('pointerup',()=>{if(drag)autosave();drag=null;el.classList.remove('dragging')});
+  }
+  function addText(p,seed={text:'Type here'}){
+    const item={id:cryptoId(),type:'text',x:p.x,y:p.y,text:seed.text||'Type here',color:selectedColor};
+    state.items.push(item);renderItems();
+    const el=objects.querySelector(`[data-id="${item.id}"]`);setTimeout(()=>{el?.focus();selectNodeText(el)},0);
+  }
+  function bindText(el,item){
+    let drag=null;
+    el.oninput=()=>{item.text=el.innerText;debouncedAutosave()};
+    el.addEventListener('pointerdown',e=>{
+      if(document.activeElement===el)return;
+      pushHistory();drag={x:e.clientX,y:e.clientY,left:item.x,top:item.y};el.setPointerCapture(e.pointerId)
+    });
+    el.addEventListener('pointermove',e=>{
+      if(!drag)return;item.x=drag.left+(e.clientX-drag.x)/scale;item.y=drag.top+(e.clientY-drag.y)/scale;el.style.left=item.x+'px';el.style.top=item.y+'px'
+    });
+    el.addEventListener('pointerup',()=>{if(drag)autosave();drag=null});
+    el.addEventListener('dblclick',()=>el.focus());
+  }
+  function selectNodeText(el){
+    if(!el)return;const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r)
+  }
+  function cryptoId(){return 'i_'+Math.random().toString(36).slice(2)+Date.now().toString(36)}
+  function debouncedAutosave(){clearTimeout(debouncedAutosave.t);debouncedAutosave.t=setTimeout(autosave,350)}
+
+  wrap.addEventListener('wheel',e=>{
+    e.preventDefault();const r=wrap.getBoundingClientRect();zoomAt(e.deltaY<0?1.1:.9,e.clientX-r.left,e.clientY-r.top)
+  },{passive:false});
+  document.getElementById('zoomIn').onclick=()=>zoomAt(1.15);
+  document.getElementById('zoomOut').onclick=()=>zoomAt(1/1.15);
+  document.getElementById('resetView').onclick=()=>{scale=1;tx=0;ty=0;applyView()};
+
+  document.getElementById('undo').onclick=undo;document.getElementById('redo').onclick=redo;
+  document.getElementById('gridBtn').onclick=()=>{pushHistory();state.grid=!state.grid;wrap.classList.toggle('noGrid',!state.grid);autosave()};
+  boardTitle.onchange=()=>{state.title=boardTitle.value.trim()||'Untitled Board';autosave()};
+  boardTitle.oninput=()=>{state.title=boardTitle.value;debouncedAutosave()};
+
+  document.getElementById('clear').onclick=()=>{
+    if(!confirm('Clear all whiteboard content?'))return;
+    pushHistory();state.ops=[];state.items=[];redrawCanvas();renderItems();autosave()
+  };
+
+  function exportBoard(){
+    const payload={...cloneState(),version:2,exportedAt:new Date().toISOString()};
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    downloadBlob(blob,safeName(state.title||'board')+'.flowboard');
+  }
+  document.getElementById('saveBoard').onclick=exportBoard;
+  document.getElementById('openBoard').onclick=()=>document.getElementById('fileOpen').click();
+  document.getElementById('fileOpen').onchange=async e=>{
+    const f=e.target.files[0];if(!f)return;
+    try{
+      const s=JSON.parse(await f.text());
+      if(!Array.isArray(s.ops)||!Array.isArray(s.items))throw new Error('Invalid board');
+      pushHistory();
+      state.title=s.title||'Imported Board';state.ops=s.ops;state.items=s.items;state.branding=s.branding||state.branding;state.grid=s.grid!==false;
+      renderAll();autosave()
+    }catch(err){alert('That file does not look like a valid FlowBoard file.')}
+    e.target.value='';
+  };
+
+  function exportPng(){
+    const out=document.createElement('canvas');out.width=BOARD_W;out.height=BOARD_H;const o=out.getContext('2d');
+    o.fillStyle='#fff';o.fillRect(0,0,BOARD_W,BOARD_H);state.ops.forEach(op=>drawOp(o,op));
+    state.items.forEach(item=>{
+      if(item.type==='sticky'){
+        o.fillStyle=item.bg||'#fff2a8';o.fillRect(item.x,item.y,220,155);o.fillStyle='#3f3a25';o.font='16px sans-serif';
+        wrapText(o,item.text||'',item.x+14,item.y+30,192,22);
+      }else if(item.type==='text'){
+        o.fillStyle=item.color||'#111827';o.font='22px sans-serif';(item.text||'').split('\n').forEach((line,i)=>o.fillText(line,item.x,item.y+24+i*27))
+      }
+    });
+    out.toBlob(blob=>downloadBlob(blob,safeName(state.title||'flowboard')+'.png'),'image/png');
+  }
+  document.getElementById('exportPng').onclick=exportPng;
+  function wrapText(c,text,x,y,maxWidth,lineHeight){
+    text.split('\n').forEach(par=>{let line='';par.split(' ').forEach(word=>{const test=line+word+' ';if(c.measureText(test).width>maxWidth&&line){c.fillText(line,x,y);line=word+' ';y+=lineHeight}else line=test});c.fillText(line,x,y);y+=lineHeight})
+  }
+  function safeName(s){return s.replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').slice(0,60)||'flowboard'}
+  function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+
+  const brandModal=document.getElementById('brandModal');
+  document.getElementById('settingsBtn').onclick=()=>{
+    document.getElementById('companyInput').value=state.branding.company||'';
+    document.getElementById('brand1Input').value=state.branding.brand1||'#2563eb';
+    document.getElementById('brand2Input').value=state.branding.brand2||'#7c3aed';
+    document.getElementById('paletteInput').value=(state.branding.palette||[]).join(',');
+    brandModal.classList.add('show')
+  };
+  document.getElementById('brandCancel').onclick=()=>brandModal.classList.remove('show');
+  document.getElementById('brandSave').onclick=async()=>{
+    pushHistory();
+    state.branding.company=document.getElementById('companyInput').value.trim()||'FlowBoard';
+    state.branding.brand1=document.getElementById('brand1Input').value;
+    state.branding.brand2=document.getElementById('brand2Input').value;
+    state.branding.palette=document.getElementById('paletteInput').value.split(',').map(x=>x.trim()).filter(x=>/^#[0-9a-f]{6}$/i.test(x)).slice(0,12);
+    const file=document.getElementById('logoInput').files[0];
+    if(file)state.branding.logoData=await readDataUrl(file);
+    renderBrand();brandModal.classList.remove('show');autosave()
+  };
+  function readDataUrl(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)})}
+
+  const templateModal=document.getElementById('templateModal');
+  document.getElementById('templatesBtn').onclick=()=>templateModal.classList.add('show');
+  document.getElementById('templateClose').onclick=()=>templateModal.classList.remove('show');
+  document.querySelectorAll('[data-template]').forEach(b=>b.onclick=()=>{pushHistory();applyTemplate(b.dataset.template);templateModal.classList.remove('show');renderAll();autosave()});
+
+  function addLabel(x,y,text,size=28,color='#111827'){
+    state.items.push({id:cryptoId(),type:'text',x,y,text,color,size});
+  }
+  function line(x1,y1,x2,y2,color='#9ca3af',size=3){state.ops.push({type:'line',color,size,x1,y1,x2,y2})}
+  function rect(x1,y1,x2,y2,color='#9ca3af',size=3){state.ops.push({type:'rect',color,size,x1,y1,x2,y2})}
+  function applyTemplate(name){
+    const baseX=280,baseY=220,w=1800,h=1100, brand=state.branding.brand1||'#2563eb';
+    if(name==='kanban'||name==='retro'){
+      const heads=name==='kanban'?['TO DO','DOING','DONE']:['WENT WELL','IMPROVE','ACTIONS'];
+      rect(baseX,baseY,baseX+w,baseY+h,'#cbd5e1',3);
+      line(baseX+w/3,baseY,baseX+w/3,baseY+h,'#cbd5e1',3);line(baseX+2*w/3,baseY,baseX+2*w/3,baseY+h,'#cbd5e1',3);
+      heads.forEach((t,i)=>addLabel(baseX+i*w/3+35,baseY+35,t,28,brand));
+    } else if(name==='matrix'){
+      rect(baseX,baseY,baseX+w,baseY+h,'#cbd5e1',3);line(baseX+w/2,baseY,baseX+w/2,baseY+h,'#cbd5e1',3);line(baseX,baseY+h/2,baseX+w,baseY+h/2,'#cbd5e1',3);
+      addLabel(baseX+w/2-80,baseY-60,'HIGH ↑',24,brand);addLabel(baseX+w+25,baseY+h/2-10,'HIGH →',24,brand);
+    } else if(name==='agenda'){
+      addLabel(baseX,baseY,'MEETING AGENDA',34,brand);
+      ['1. Goal / outcome','2. Topics','3. Decisions','4. Actions + owners','5. Parking lot'].forEach((t,i)=>addSticky({x:baseX,y:baseY+100+i*185},{text:t,bg:['#dbeafe','#ede9fe','#d8f3dc','#fff2a8','#ffd9e8'][i]}));
+    } else if(name==='swot'){
+      rect(baseX,baseY,baseX+w,baseY+h,'#cbd5e1',3);line(baseX+w/2,baseY,baseX+w/2,baseY+h,'#cbd5e1',3);line(baseX,baseY+h/2,baseX+w,baseY+h/2,'#cbd5e1',3);
+      ['STRENGTHS','WEAKNESSES','OPPORTUNITIES','THREATS'].forEach((t,i)=>addLabel(baseX+(i%2)*w/2+35,baseY+Math.floor(i/2)*h/2+35,t,26,brand));
+    } else if(name==='brainstorm'){
+      state.items.push({id:cryptoId(),type:'sticky',x:baseX+w/2-110,y:baseY+h/2-80,text:'Core question / idea',bg:'#fff2a8'});
+      [[150,130],[1450,120],[110,780],[1500,800],[800,100],[800,900]].forEach((p,i)=>state.items.push({id:cryptoId(),type:'sticky',x:baseX+p[0],y:baseY+p[1],text:'Idea '+(i+1),bg:['#dbeafe','#ffd9e8','#d8f3dc','#ede9fe','#ffe4c7','#dbeafe'][i]}));
+    }
+  }
+
+  document.getElementById('timerBtn').onclick=()=>document.getElementById('timerPanel').classList.toggle('show');
+  document.querySelectorAll('#timerPanel [data-min]').forEach(b=>b.onclick=()=>startTimer(Number(b.dataset.min)));
+  document.getElementById('timerStop').onclick=stopTimer;
+  function startTimer(min){
+    clearInterval(timerHandle);timerEnd=Date.now()+min*60000;tickTimer();timerHandle=setInterval(tickTimer,500)
+  }
+  function tickTimer(){
+    const left=Math.max(0,timerEnd-Date.now()),sec=Math.ceil(left/1000),m=Math.floor(sec/60),s=sec%60;
+    document.getElementById('timerValue').textContent=String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+    if(left<=0){clearInterval(timerHandle);timerHandle=null}
+  }
+  function stopTimer(){clearInterval(timerHandle);timerHandle=null;timerEnd=0;document.getElementById('timerValue').textContent='00:00'}
+
+  document.addEventListener('keydown',e=>{
+    const tag=document.activeElement?.tagName;
+    const editing=['INPUT','TEXTAREA'].includes(tag)||document.activeElement?.isContentEditable;
+    if(e.code==='Space'&&!editing){spaceDown=true;e.preventDefault()}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?redo():undo()}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();redo()}
+    if(!editing&&!e.ctrlKey&&!e.metaKey){
+      const map={p:'pen',h:'highlighter',e:'eraser',l:'line',r:'rect',o:'ellipse',t:'text',s:'sticky',v:'pan'};
+      const k=e.key.toLowerCase();if(map[k])setTool(map[k])
+    }
+  });
+  document.addEventListener('keyup',e=>{if(e.code==='Space')spaceDown=false});
+
+  applyView();renderAll();loadAutosave();
+})();
+</script>
+</body>
+</html>
