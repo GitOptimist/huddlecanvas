@@ -39,6 +39,7 @@ HuddleCanvas is a visual collaboration workspace designed to move teams from ope
 - Shape popover: rectangle, rounded rectangle, ellipse, triangle, diamond, hexagon, star and arrow/connector.
 - Voting, checklists, action cards and private-brainstorm/reveal prototype.
 - Frames + local presentation mode.
+- Visually distinct lasso and frame workflows: temporary blue selection marquee versus persistent, titled presentation regions.
 - Local search, named checkpoints and local comments/@mentions prototype.
 - AI local utilities, including quiz cards generated from selected board text.
 - PNG, PDF and editable `.flowboard` export; image paste/drag/import.
