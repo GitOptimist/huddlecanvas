@@ -23,5 +23,6 @@ The root `index.html` is a copy of the current v8 prototype.
 - Added persistent text width, height, weight, accessibility description, and lock fields while retaining defaults for existing saved boards.
 - Added professional workshop markers, pre-placement sticky colors, searchable categorized templates, three business templates, a canvas context menu, and fit-to-content controls.
 - Preserved the compact HuddleCanvas tool model rather than copying a dense consumer whiteboard ribbon; new controls appear contextually and use consistent inline SVG iconography.
+- Refined the contextual text toolbar and overflow menu with a unified SVG icon system, stronger spacing and hierarchy, accessible pressed/expanded states, and polished professional tooltips.
 
 Historical files are for traceability and regression/reference. New feature work should target the root app or the future Hosted Alpha branch, not the archive.
