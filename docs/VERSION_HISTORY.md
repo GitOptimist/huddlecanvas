@@ -16,4 +16,10 @@ This repository preserves the historical prototype source files that were availa
 
 The root `index.html` is a copy of the current v8 prototype.
 
+## Post-v8 prototype improvements
+
+- Added accessible toast notifications used by prototype actions.
+- Added a contextual text-object toolbar with edit, color, bold, duplicate, delete, alt text, layer ordering, lock/unlock, and four-corner resize controls.
+- Added persistent text width, height, weight, accessibility description, and lock fields while retaining defaults for existing saved boards.
+
 Historical files are for traceability and regression/reference. New feature work should target the root app or the future Hosted Alpha branch, not the archive.
