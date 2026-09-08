@@ -25,5 +25,6 @@ The root `index.html` is a copy of the current v8 prototype.
 - Preserved the compact HuddleCanvas tool model rather than copying a dense consumer whiteboard ribbon; new controls appear contextually and use consistent inline SVG iconography.
 - Refined the contextual text toolbar and overflow menu with a unified SVG icon system, stronger spacing and hierarchy, accessible pressed/expanded states, and polished professional tooltips.
 - Rebuilt portable voting as a five-vote local workshop flow with per-object toggles, remaining-vote feedback, an explicit exit, safe checklist controls, confirmed vote reset, and undoable board-content reset. Context menus now adapt above or below their anchor to avoid header clipping.
+- Repaired lasso selection so dragging works across genuine empty board surfaces, displays a stable screen-space selection rectangle at every zoom level, preserves Shift-added selections, selects complete groups, cancels cleanly on pointer interruption, and clears with Escape. The Select hint now describes the real interaction and dismisses automatically.
 
 Historical files are for traceability and regression/reference. New feature work should target the root app or the future Hosted Alpha branch, not the archive.
