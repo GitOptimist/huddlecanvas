@@ -35,7 +35,7 @@ HuddleCanvas is a visual collaboration workspace designed to move teams from ope
 - Multi-board workspace and bulk board management.
 - GETITECH ownership mark + HuddleCanvas working identity.
 - Ink, highlighter, eraser, backgrounds, images/screenshots and ink-over-objects.
-- Lasso/multi-select, Group/Ungroup, basic scale/rotate, snapping and auto-arrange.
+- Lasso/multi-select, Group/Ungroup, basic scale/rotate, snapping, alignment/distribution, layer ordering and object locking prototypes.
 - Shape popover: rectangle, rounded rectangle, ellipse, triangle, diamond, hexagon, star and arrow/connector.
 - Voting, checklists, action cards and private-brainstorm/reveal prototype.
 - Frames + local presentation mode.
@@ -60,15 +60,19 @@ Static JavaScript syntax and literal DOM-ID checks pass. Automated browser navig
 
 ### Vote
 1. Choose **Vote**.
-2. Click a card/object to add a visible vote.
-3. **Shift-click** to remove a vote.
-4. Use **Facilitate → Reset votes** to clear all votes.
+2. Click a card/object to add one local vote; click it again to remove that vote.
+3. Allocate up to five votes across distinct objects.
+4. Choose **Done voting** to return to Select.
+5. Use **Facilitate → Reset votes** to clear all votes.
 
 ### Checklist
 Choose **Checklist**, click the canvas, edit the title/items and tick rows as work is completed.
 
 ### Group / Ungroup
-Choose **Select**. Lasso several objects or Shift-click drag handles. The contextual Selection bar exposes **Group**, **Ungroup**, **Auto arrange**, scale, rotate, comment, duplicate and delete.
+Choose **Select**. Drag across empty canvas to select several objects, or Shift-click drag handles to add more. The contextual Selection bar exposes **Group**, **Ungroup**, **Arrange**, scale, rotate, comment, duplicate and delete.
+
+### Arrange / Lock
+Select one or more objects and choose **Arrange** in the contextual Selection bar. Align two or more objects, distribute three or more objects, change front/back layer order, or lock objects against editing and accidental destructive actions. Select a locked object and return to **Arrange** to unlock it; for a single text object, use **More actions → Unlock**.
 
 ### AI quiz
 Select relevant content → open **HuddleCanvas AI** → **Quiz from selected**. The portable build creates editable local quiz cards. Production AI can generate semantic questions, distractors, explanations, difficulty and scoring.
