@@ -28,6 +28,7 @@ The root `index.html` is a copy of the current v8 prototype.
 - Repaired lasso selection so dragging works across genuine empty board surfaces, displays a stable screen-space selection rectangle at every zoom level, preserves Shift-added selections, selects complete groups, cancels cleanly on pointer interruption, and clears with Escape. The Select hint now describes the real interaction and dismisses automatically.
 - Replaced the basic auto-arrange action with a professional contextual Arrange menu covering six-edge alignment, horizontal/vertical distribution, four-step layer ordering, and reusable object locking. Locked objects now show a standard lock marker and are protected from edits and destructive selection actions until unlocked.
 - Separated the temporary lasso from persistent presentation frames: the lasso is now a blue dashed, explicitly labeled selection marquee, while frames use solid presentation chrome, a permanent FRAME title tab, and clearer tool guidance.
+- Promoted drawn vector shapes from flat ink into independent board objects so they can be selected, moved, layered, grouped and ungrouped. Existing saved shapes migrate automatically, templates use the same object model, shape placement returns to Select, and the canvas menu now has reliable outside-click, Escape and explicit close behavior.
 
 ## M3.1 Hosted Alpha foundation
 
