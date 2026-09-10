@@ -1,0 +1,28 @@
+{
+  "name": "huddlecanvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HuddleCanvas Hosted Alpha monorepo with the preserved v8 prototype at the repository root.",
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": ">=22.14.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "typecheck": "turbo run typecheck",
+    "test": "pnpm test:foundation",
+    "test:foundation": "node --experimental-strip-types --test packages/board-schema/src/*.test.ts packages/canvas-core/src/*.test.ts packages/authz/src/*.test.ts",
+    "test:e2e": "pnpm --filter @huddlecanvas/e2e test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm test:foundation && pnpm typecheck && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.6",
+    "typescript": "^5.9.2"
+  }
+}

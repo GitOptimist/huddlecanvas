@@ -1,0 +1,55 @@
+name: Hosted Alpha CI
+
+on:
+  push:
+    branches:
+      - "m3/**"
+  pull_request:
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "tests/**"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "tsconfig.base.json"
+      - ".github/workflows/hosted-alpha-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Foundation tests
+        run: pnpm test:foundation
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Chromium
+        run: pnpm --filter @huddlecanvas/e2e exec playwright install --with-deps chromium
+
+      - name: Hosted shell smoke test
+        run: pnpm test:e2e

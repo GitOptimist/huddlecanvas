@@ -13,6 +13,13 @@ node_modules/
 dist/
 build/
 coverage/
+*.tsbuildinfo
+.turbo/
+playwright-report/
+test-results/
+
+# Hosted Alpha local runtime state
+.data/
 
 # Temporary exports
 *.tmp

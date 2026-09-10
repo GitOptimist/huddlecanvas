@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "boardId": "invalid-board",
+  "generation": 0,
+  "title": "Invalid connector fixture",
+  "settings": {
+    "background": { "kind": "grid", "color": "#ffffff" },
+    "snap": { "enabled": true, "gridSize": 10 }
+  },
+  "objects": {
+    "connector-1": {
+      "id": "connector-1",
+      "type": "connector",
+      "parentId": null,
+      "orderKey": "00000000",
+      "transform": { "x": 0, "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1 },
+      "size": { "width": 100, "height": 40 },
+      "locked": false,
+      "hidden": false,
+      "createdAt": "1970-01-01T00:00:00.000Z",
+      "createdBy": "fixture",
+      "updatedAt": "1970-01-01T00:00:00.000Z",
+      "updatedBy": "fixture",
+      "start": { "kind": "binding", "objectId": "missing", "anchor": "right" },
+      "end": { "kind": "point", "x": 100, "y": 40 },
+      "routing": "straight",
+      "style": { "color": "#172033", "width": 2, "endMarker": "arrow" }
+    }
+  },
+  "rootOrder": ["connector-1"]
+}

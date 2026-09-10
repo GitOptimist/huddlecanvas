@@ -29,4 +29,13 @@ The root `index.html` is a copy of the current v8 prototype.
 - Replaced the basic auto-arrange action with a professional contextual Arrange menu covering six-edge alignment, horizontal/vertical distribution, four-step layer ordering, and reusable object locking. Locked objects now show a standard lock marker and are protected from edits and destructive selection actions until unlocked.
 - Separated the temporary lasso from persistent presentation frames: the lasso is now a blue dashed, explicitly labeled selection marquee, while frames use solid presentation chrome, a permanent FRAME title tab, and clearer tool guidance.
 
+## M3.1 Hosted Alpha foundation
+
+- Preserved the portable v8 baseline at tag `prototype-v8` and opened the production workstream on `m3/hosted-alpha`.
+- Added a React/TypeScript monorepo shell without changing the root prototype.
+- Added canonical board schema v1, validation, deterministic serialization, migrations and a read-only v8 importer with explicit loss reporting.
+- Added pure command/geometry foundations, including lock enforcement, connector cleanup and spatial lasso selection independent of frame objects.
+- Added a capability-based role policy, documented API/realtime boundaries, architecture decisions, CI, fixtures and automated foundation tests.
+- Kept the UI honest: the new professional model proof is read-only until authentication, persistence and authoritative editing exist.
+
 Historical files are for traceability and regression/reference. New feature work should target the root app or the future Hosted Alpha branch, not the archive.

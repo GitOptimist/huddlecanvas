@@ -1,0 +1,76 @@
+{
+  "id": "customer-discovery",
+  "name": "Customer discovery workshop",
+  "grid": true,
+  "background": "#ffffff",
+  "media": [
+    {
+      "id": "journey-map",
+      "src": "data:image/png;base64,fixture-omitted",
+      "altText": "Customer journey map",
+      "x": 720,
+      "y": 120,
+      "w": 320,
+      "h": 220
+    }
+  ],
+  "ops": [
+    {
+      "type": "stroke",
+      "mode": "pen",
+      "color": "#172033",
+      "size": 3,
+      "points": [
+        { "x": 80, "y": 80 },
+        { "x": 110, "y": 105 },
+        { "x": 145, "y": 92 }
+      ]
+    },
+    {
+      "type": "arrow",
+      "color": "#6256d9",
+      "size": 2,
+      "x1": 300,
+      "y1": 220,
+      "x2": 520,
+      "y2": 220
+    }
+  ],
+  "items": [
+    {
+      "id": "pain-point",
+      "type": "sticky",
+      "x": 100,
+      "y": 180,
+      "text": "Setup takes too long",
+      "bg": "#fef3c7",
+      "groupId": "insights"
+    },
+    {
+      "id": "evidence",
+      "type": "text",
+      "x": 360,
+      "y": 190,
+      "text": "Mentioned in 6 of 8 interviews",
+      "groupId": "insights"
+    },
+    {
+      "id": "follow-up",
+      "type": "action",
+      "x": 610,
+      "y": 390,
+      "title": "Prototype shorter setup",
+      "owner": "Maya",
+      "due": "2026-10-15"
+    },
+    {
+      "id": "workshop-frame",
+      "type": "frame",
+      "x": 50,
+      "y": 50,
+      "w": 1050,
+      "h": 620,
+      "title": "Discovery findings"
+    }
+  ]
+}
