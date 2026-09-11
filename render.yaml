@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: huddlecanvas-staging
+    runtime: node
+    plan: free
+    region: oregon
+    branch: m3/hosted-alpha
+    autoDeployTrigger: checksPass
+    buildCommand: corepack enable && corepack prepare pnpm@10.15.1 --activate && pnpm install --frozen-lockfile && pnpm --filter @huddlecanvas/web build && pnpm --filter @huddlecanvas/api typecheck
+    startCommand: pnpm --filter @huddlecanvas/api start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.7.0
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: HUDDLECANVAS_PERSISTENCE
+        value: postgresql
+      - key: HUDDLECANVAS_RUN_MIGRATIONS
+        value: "true"
+      - key: HUDDLECANVAS_ALLOW_DEV_AUTH
+        value: "false"
+      - key: HUDDLECANVAS_LOGGER
+        value: "true"
+      - key: HUDDLECANVAS_WEB_DIST
+        value: apps/web/dist
+      - key: HUDDLECANVAS_SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: huddlecanvas-staging-db
+          property: connectionString
+      - key: HUDDLECANVAS_PUBLIC_ORIGIN
+        sync: false
+      - key: HUDDLECANVAS_OIDC_ISSUER
+        sync: false
+      - key: HUDDLECANVAS_OIDC_CLIENT_ID
+        sync: false
+      - key: HUDDLECANVAS_OIDC_CLIENT_SECRET
+        sync: false
+
+databases:
+  - name: huddlecanvas-staging-db
+    plan: free
+    region: oregon
+    databaseName: huddlecanvas_staging
+    user: huddlecanvas
+    ipAllowList: []

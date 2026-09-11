@@ -9,6 +9,7 @@ import {
   SessionSigner,
   type IdentityVerifier,
 } from "./auth.ts";
+import { StandardOidcClient } from "./browser-oidc.ts";
 import { PostgresBoardRepository } from "./postgres-repository.ts";
 import {
   BoardRepository,
@@ -22,9 +23,9 @@ const allowDevAuth =
   process.env.HUDDLECANVAS_ALLOW_DEV_AUTH === "true" || !production;
 const configuredSecret = process.env.HUDDLECANVAS_SESSION_SECRET;
 
-if (production && allowDevAuth && !configuredSecret) {
+if (production && !configuredSecret) {
   throw new Error(
-    "HUDDLECANVAS_SESSION_SECRET is required when development sign-in is enabled in production.",
+    "HUDDLECANVAS_SESSION_SECRET is required in production so browser sessions survive restarts.",
   );
 }
 
@@ -33,27 +34,74 @@ const signer = new SessionSigner(
     (production ? randomBytes(32).toString("base64url") : DEVELOPMENT_SECRET),
 );
 
-const oidcValues = [
-  process.env.HUDDLECANVAS_OIDC_ISSUER,
+const oidcIssuer = process.env.HUDDLECANVAS_OIDC_ISSUER;
+const oidcBearerValues = [
   process.env.HUDDLECANVAS_OIDC_AUDIENCE,
   process.env.HUDDLECANVAS_OIDC_JWKS_URI,
 ];
-if (oidcValues.some(Boolean) && !oidcValues.every(Boolean)) {
+if (
+  oidcBearerValues.some(Boolean) &&
+  (!oidcIssuer || !oidcBearerValues.every(Boolean))
+) {
   throw new Error(
     "HUDDLECANVAS_OIDC_ISSUER, HUDDLECANVAS_OIDC_AUDIENCE, and HUDDLECANVAS_OIDC_JWKS_URI must be configured together.",
   );
 }
 
 let identityVerifier: IdentityVerifier = signer;
-if (oidcValues.every(Boolean)) {
+if (oidcIssuer && oidcBearerValues.every(Boolean)) {
   const oidc = new OidcIdentityVerifier({
-    issuer: oidcValues[0]!,
-    audience: oidcValues[1]!,
-    jwksUri: oidcValues[2]!,
+    issuer: oidcIssuer,
+    audience: oidcBearerValues[0]!,
+    jwksUri: oidcBearerValues[1]!,
   });
   identityVerifier = allowDevAuth
     ? new CompositeIdentityVerifier([signer, oidc])
     : oidc;
+}
+
+const browserOidcValues = [
+  oidcIssuer,
+  process.env.HUDDLECANVAS_OIDC_CLIENT_ID,
+  process.env.HUDDLECANVAS_OIDC_CLIENT_SECRET,
+  process.env.HUDDLECANVAS_PUBLIC_ORIGIN,
+];
+if (browserOidcValues.some(Boolean) && !browserOidcValues.every(Boolean)) {
+  throw new Error(
+    "HUDDLECANVAS_OIDC_ISSUER, HUDDLECANVAS_OIDC_CLIENT_ID, HUDDLECANVAS_OIDC_CLIENT_SECRET, and HUDDLECANVAS_PUBLIC_ORIGIN must be configured together for browser sign-in.",
+  );
+}
+
+const publicOrigin = browserOidcValues[3];
+if (publicOrigin) {
+  const parsedOrigin = new URL(publicOrigin);
+  if (parsedOrigin.origin !== parsedOrigin.href.replace(/\/$/, "")) {
+    throw new Error(
+      "HUDDLECANVAS_PUBLIC_ORIGIN must not include a path, query, or fragment.",
+    );
+  }
+  const loopback =
+    parsedOrigin.hostname === "127.0.0.1" ||
+    parsedOrigin.hostname === "localhost";
+  if (parsedOrigin.protocol !== "https:" && !loopback) {
+    throw new Error(
+      "HUDDLECANVAS_PUBLIC_ORIGIN must use HTTPS outside local development.",
+    );
+  }
+}
+
+const browserOidc = browserOidcValues.every(Boolean)
+  ? new StandardOidcClient({
+      issuer: browserOidcValues[0]!,
+      clientId: browserOidcValues[1]!,
+      clientSecret: browserOidcValues[2]!,
+    })
+  : undefined;
+
+if (production && !browserOidc && !allowDevAuth) {
+  throw new Error(
+    "Production requires browser OIDC configuration when development sign-in is disabled.",
+  );
 }
 
 const dataFile = resolve(
@@ -89,6 +137,18 @@ const server = buildServer({
   repository,
   signer,
   identityVerifier,
+  ...(browserOidc ? { browserOidc } : {}),
+  ...(publicOrigin ? { publicOrigin } : {}),
+  oidcCallbackPath:
+    process.env.HUDDLECANVAS_OIDC_CALLBACK_PATH ?? "/api/v1/auth/callback",
+  transactionSecret: configuredSecret ?? DEVELOPMENT_SECRET,
+  ...(production || process.env.HUDDLECANVAS_WEB_DIST
+    ? {
+        staticDirectory: resolve(
+          process.env.HUDDLECANVAS_WEB_DIST ?? "apps/web/dist",
+        ),
+      }
+    : {}),
   allowDevAuth,
   logger: process.env.HUDDLECANVAS_LOGGER !== "false",
 });
@@ -96,3 +156,9 @@ const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? "0.0.0.0";
 
 await server.listen({ host, port });
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    void server.close().finally(() => process.exit(0));
+  });
+}

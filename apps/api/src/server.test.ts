@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -10,6 +10,7 @@ import {
   SessionSigner,
   type IdentityVerifier,
 } from "./auth.ts";
+import type { BrowserOidcClient } from "./browser-oidc.ts";
 import {
   BoardRepository,
   JsonFileStorage,
@@ -53,6 +54,16 @@ interface VersionsResponse {
 }
 
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` });
+
+function firstCookie(
+  value: string | string[] | undefined,
+  name: string,
+): string {
+  const values = Array.isArray(value) ? value : value ? [value] : [];
+  const selected = values.find((item) => item.startsWith(`${name}=`));
+  assert.ok(selected, `Expected ${name} cookie`);
+  return selected.split(";", 1)[0]!;
+}
 
 async function signIn(
   server: ReturnType<typeof buildServer>,
@@ -315,6 +326,173 @@ test("external identities are provisioned into one stable personal workspace", a
   const meta = await server.inject({ method: "GET", url: "/v1/meta" });
   assert.equal(meta.json().boundaries.externalIdentityProvider, true);
   await server.close();
+});
+
+test("browser OIDC creates a secure cookie session and enforces request origin", async () => {
+  const now = Date.now();
+  const oidc: BrowserOidcClient = {
+    async createAuthorizationRequest(input) {
+      assert.equal(
+        input.redirectUri,
+        "https://staging.huddlecanvas.test/api/v1/auth/callback",
+      );
+      assert.equal(input.returnTo, "/boards/one");
+      return {
+        url: "https://identity.example.test/authorize?request=one",
+        transaction: {
+          state: "state-1",
+          nonce: "nonce-1",
+          codeVerifier: "verifier-1",
+          returnTo: input.returnTo,
+          createdAt: now,
+        },
+      };
+    },
+    async completeAuthorization(input) {
+      assert.equal(
+        input.callbackUrl,
+        "https://staging.huddlecanvas.test/api/v1/auth/callback?code=code-1&state=state-1",
+      );
+      assert.equal(input.transaction.state, "state-1");
+      return {
+        externalSubject: "https://identity.example.test|subject-1",
+        email: "oidc@example.com",
+        displayName: "OIDC User",
+      };
+    },
+  };
+  const server = buildServer({
+    repository: new BoardRepository(new MemoryStorage()),
+    signer: new SessionSigner("staging-session-secret-12345"),
+    transactionSecret: "staging-transaction-secret-12345",
+    browserOidc: oidc,
+    publicOrigin: "https://staging.huddlecanvas.test",
+    secureCookies: true,
+    allowDevAuth: false,
+    logger: false,
+  });
+  await server.ready();
+
+  const config = await server.inject({
+    method: "GET",
+    url: "/api/v1/auth/config",
+  });
+  assert.equal(config.statusCode, 200);
+  assert.equal(config.json().mode, "oidc");
+
+  const login = await server.inject({
+    method: "GET",
+    url: "/api/v1/auth/login?returnTo=%2Fboards%2Fone",
+  });
+  assert.equal(login.statusCode, 302, login.body);
+  assert.equal(
+    login.headers.location,
+    "https://identity.example.test/authorize?request=one",
+  );
+  const transactionCookie = firstCookie(
+    login.headers["set-cookie"],
+    "huddlecanvas_oidc_transaction",
+  );
+
+  const callback = await server.inject({
+    method: "GET",
+    url: "/api/v1/auth/callback?code=code-1&state=state-1",
+    headers: { cookie: transactionCookie },
+  });
+  assert.equal(callback.statusCode, 302, callback.body);
+  assert.equal(
+    callback.headers.location,
+    "https://staging.huddlecanvas.test/boards/one",
+  );
+  const sessionCookie = firstCookie(
+    callback.headers["set-cookie"],
+    "__Host-huddlecanvas_session",
+  );
+
+  const session = await server.inject({
+    method: "GET",
+    url: "/api/v1/session",
+    headers: { cookie: sessionCookie },
+  });
+  assert.equal(session.statusCode, 200, session.body);
+  assert.equal(session.json().identity.email, "oidc@example.com");
+  assert.equal(session.json().workspaces.length, 1);
+
+  const rejectedLogout = await server.inject({
+    method: "POST",
+    url: "/api/v1/auth/logout",
+    headers: { cookie: sessionCookie, origin: "https://attacker.example" },
+  });
+  assert.equal(rejectedLogout.statusCode, 403);
+
+  const logout = await server.inject({
+    method: "POST",
+    url: "/api/v1/auth/logout",
+    headers: {
+      cookie: sessionCookie,
+      origin: "https://staging.huddlecanvas.test",
+    },
+  });
+  assert.equal(logout.statusCode, 204, logout.body);
+  assert.match(
+    String(logout.headers["set-cookie"]),
+    /__Host-huddlecanvas_session=; Path=\/; Max-Age=0/,
+  );
+
+  await server.close();
+});
+
+test("production server serves the web build and keeps unknown API routes as JSON", async () => {
+  const directory = await mkdtemp(
+    join(process.cwd(), ".huddlecanvas-web-test-"),
+  );
+  try {
+    await mkdir(join(directory, "assets"));
+    await writeFile(
+      join(directory, "index.html"),
+      "<!doctype html><h1>Hosted</h1>",
+    );
+    await writeFile(
+      join(directory, "assets", "app.js"),
+      "console.log('hosted')",
+    );
+    const server = buildServer({
+      repository: new BoardRepository(new MemoryStorage()),
+      staticDirectory: directory,
+      logger: false,
+    });
+    await server.ready();
+
+    const root = await server.inject({ method: "GET", url: "/" });
+    assert.equal(root.statusCode, 200, root.body);
+    assert.match(root.headers["content-type"] ?? "", /^text\/html/);
+    assert.match(root.body, /Hosted/);
+
+    const asset = await server.inject({ method: "GET", url: "/assets/app.js" });
+    assert.equal(asset.statusCode, 200, asset.body);
+    assert.equal(
+      asset.headers["cache-control"],
+      "public, max-age=31536000, immutable",
+    );
+
+    const clientRoute = await server.inject({
+      method: "GET",
+      url: "/boards/one",
+    });
+    assert.equal(clientRoute.statusCode, 200, clientRoute.body);
+    assert.match(clientRoute.body, /Hosted/);
+
+    const missingApi = await server.inject({
+      method: "GET",
+      url: "/api/v1/missing",
+    });
+    assert.equal(missingApi.statusCode, 404);
+    assert.equal(missingApi.json().error, "not_found");
+
+    await server.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("file storage survives a repository restart", async () => {

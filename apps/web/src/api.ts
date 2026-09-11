@@ -46,6 +46,15 @@ export interface BoardVersion {
   reason: string;
 }
 
+export type AuthMode = "oidc" | "development" | "unavailable";
+
+const API_BASE = "/api";
+
+export function hostedLoginUrl(returnTo = "/"): string {
+  const query = new URLSearchParams({ returnTo });
+  return `${API_BASE}/v1/auth/login?${query.toString()}`;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -67,13 +76,17 @@ export class ApiError extends Error {
 
 async function request<T>(
   path: string,
-  options: RequestInit & { token?: string } = {},
+  options: RequestInit & { token?: string | undefined } = {},
 ): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
   if (options.body) headers.set("Content-Type", "application/json");
   if (options.token) headers.set("Authorization", `Bearer ${options.token}`);
-  const response = await fetch(`/api${path}`, { ...options, headers });
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    credentials: "same-origin",
+    headers,
+  });
   const payload = (await response.json().catch(() => ({}))) as {
     error?: string;
     message?: string;
@@ -94,6 +107,14 @@ async function request<T>(
   return payload as T;
 }
 
+export async function getAuthConfig() {
+  return request<{ mode: AuthMode }>("/v1/auth/config");
+}
+
+export async function signOutSession() {
+  return request<void>("/v1/auth/logout", { method: "POST" });
+}
+
 export async function createDevSession(input: {
   email: string;
   displayName: string;
@@ -110,14 +131,17 @@ export async function createDevSession(input: {
   });
 }
 
-export async function getSession(token: string) {
+export async function getSession(token?: string) {
   return request<{ identity: Identity; workspaces: WorkspaceAccess[] }>(
     "/v1/session",
     { token },
   );
 }
 
-export async function listBoards(token: string, workspaceId: string) {
+export async function listBoards(
+  token: string | undefined,
+  workspaceId: string,
+) {
   return request<{ role: Role; boards: BoardMetadata[] }>(
     `/v1/workspaces/${workspaceId}/boards`,
     { token },
@@ -125,7 +149,7 @@ export async function listBoards(token: string, workspaceId: string) {
 }
 
 export async function createBoard(
-  token: string,
+  token: string | undefined,
   workspaceId: string,
   title: string,
 ) {
@@ -135,14 +159,14 @@ export async function createBoard(
   );
 }
 
-export async function getBoard(token: string, boardId: string) {
+export async function getBoard(token: string | undefined, boardId: string) {
   return request<{ board: BoardRecord; role: Role }>(`/v1/boards/${boardId}`, {
     token,
   });
 }
 
 export async function saveBoard(
-  token: string,
+  token: string | undefined,
   boardId: string,
   expectedRevision: number,
   document: BoardDocument,
@@ -155,7 +179,7 @@ export async function saveBoard(
   });
 }
 
-export async function listVersions(token: string, boardId: string) {
+export async function listVersions(token: string | undefined, boardId: string) {
   return request<{ versions: BoardVersion[] }>(
     `/v1/boards/${boardId}/versions`,
     { token },
@@ -163,7 +187,7 @@ export async function listVersions(token: string, boardId: string) {
 }
 
 export async function restoreVersion(
-  token: string,
+  token: string | undefined,
   boardId: string,
   versionId: string,
 ) {

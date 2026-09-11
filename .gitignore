@@ -15,6 +15,7 @@ build/
 coverage/
 *.tsbuildinfo
 .turbo/
+.cache/
 playwright-report/
 test-results/
 

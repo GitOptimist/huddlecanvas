@@ -10,12 +10,16 @@ import {
   ApiError,
   createBoard,
   createDevSession,
+  getAuthConfig,
   getBoard,
   getSession,
+  hostedLoginUrl,
   listBoards,
   listVersions,
   restoreVersion,
   saveBoard,
+  signOutSession,
+  type AuthMode,
   type BoardMetadata,
   type BoardRecord,
   type BoardVersion,
@@ -63,11 +67,32 @@ function errorMessage(error: unknown): string {
     : "The request could not be completed.";
 }
 
-function SignInScreen({ onSignedIn }: { onSignedIn: (token: string) => void }) {
+function loginError(): string {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("auth_error") !== "login_failed") return "";
+  params.delete("auth_error");
+  const query = params.toString();
+  window.history.replaceState(
+    {},
+    "",
+    `${window.location.pathname}${query ? `?${query}` : ""}`,
+  );
+  return "Sign-in could not be completed. Please try again.";
+}
+
+function SignInScreen({
+  authMode,
+  initialError,
+  onSignedIn,
+}: {
+  authMode: AuthMode;
+  initialError: string;
+  onSignedIn: (token: string) => void;
+}) {
   const [displayName, setDisplayName] = useState("Alex Rivera");
   const [email, setEmail] = useState("alex@example.com");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,6 +109,10 @@ function SignInScreen({ onSignedIn }: { onSignedIn: (token: string) => void }) {
     }
   }
 
+  function beginHostedSignIn() {
+    window.location.assign(hostedLoginUrl("/"));
+  }
+
   return (
     <main className="sign-in-shell">
       <section className="sign-in-story" aria-label="HuddleCanvas introduction">
@@ -94,7 +123,7 @@ function SignInScreen({ onSignedIn }: { onSignedIn: (token: string) => void }) {
           <span>HuddleCanvas</span>
         </div>
         <div className="story-copy">
-          <span className="story-kicker">Hosted Alpha · M3.3</span>
+          <span className="story-kicker">Hosted Alpha · M3.4</span>
           <h1>Your workshop should still be useful tomorrow.</h1>
           <p>
             Open a durable workspace, make a decision visible, and return to the
@@ -113,53 +142,83 @@ function SignInScreen({ onSignedIn }: { onSignedIn: (token: string) => void }) {
           </div>
         </div>
         <p className="story-boundary">
-          OIDC and PostgreSQL adapters are ready for staging. Realtime presence
-          follows the staging durability gate.
+          Secure hosted sign-in and PostgreSQL persistence are enabled for the
+          staging durability gate. Realtime presence follows after recovery is
+          proven across browsers.
         </p>
       </section>
 
       <section className="sign-in-panel">
-        <form className="sign-in-card" onSubmit={submit}>
-          <span className="alpha-badge">Development access</span>
-          <h2>Enter your hosted workspace</h2>
-          <p>
-            This local alpha issues a signed, time-limited session. It is not a
-            simulated social login.
-          </p>
-          <label>
-            Display name
-            <input
-              name="displayName"
-              autoComplete="name"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Work email
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-          </label>
-          {error ? (
-            <div className="form-error" role="alert">
-              {error}
-            </div>
-          ) : null}
-          <button className="primary-action" disabled={busy}>
-            {busy ? "Creating secure session…" : "Continue to workspace"}
-            <Icon name="arrow" />
-          </button>
-          <small>
-            Development sign-in is disabled by default in production.
-          </small>
-        </form>
+        {authMode === "development" ? (
+          <form className="sign-in-card" onSubmit={submit}>
+            <span className="alpha-badge">Development access</span>
+            <h2>Enter your hosted workspace</h2>
+            <p>
+              This local-only form issues a time-limited development session.
+            </p>
+            <label>
+              Display name
+              <input
+                name="displayName"
+                autoComplete="name"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Work email
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </label>
+            {error ? (
+              <div className="form-error" role="alert">
+                {error}
+              </div>
+            ) : null}
+            <button className="primary-action" disabled={busy}>
+              {busy ? "Creating secure session…" : "Continue to workspace"}
+              <Icon name="arrow" />
+            </button>
+            <small>
+              Development access is disabled in staging and production.
+            </small>
+          </form>
+        ) : (
+          <div className="sign-in-card">
+            <span className="alpha-badge">Invited alpha</span>
+            <h2>Sign in to HuddleCanvas</h2>
+            <p>
+              Use your invited account to open the same workspace and boards on
+              any supported browser.
+            </p>
+            {error ? (
+              <div className="form-error" role="alert">
+                {error}
+              </div>
+            ) : null}
+            {authMode === "oidc" ? (
+              <button
+                className="primary-action"
+                type="button"
+                onClick={beginHostedSignIn}
+              >
+                Continue securely <Icon name="arrow" />
+              </button>
+            ) : (
+              <div className="form-error" role="alert">
+                Staging sign-in has not been configured yet.
+              </div>
+            )}
+            <small>Your password is handled by the identity provider.</small>
+          </div>
+        )}
       </section>
     </main>
   );
@@ -169,6 +228,8 @@ export default function App() {
   const [token, setToken] = useState(
     () => localStorage.getItem(SESSION_KEY) ?? "",
   );
+  const [authMode, setAuthMode] = useState<AuthMode>("unavailable");
+  const [authError] = useState(loginError);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [workspaceAccess, setWorkspaceAccess] =
     useState<WorkspaceAccess | null>(null);
@@ -177,7 +238,7 @@ export default function App() {
   const [role, setRole] = useState<Role>("viewer");
   const [versions, setVersions] = useState<BoardVersion[]>([]);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(Boolean(token));
+  const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [error, setError] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -194,7 +255,7 @@ export default function App() {
       : null;
 
   const refreshBoardList = useCallback(
-    async (access: WorkspaceAccess, sessionToken: string) => {
+    async (access: WorkspaceAccess, sessionToken?: string) => {
       const result = await listBoards(sessionToken, access.workspace.id);
       setRole(result.role);
       setBoards(result.boards);
@@ -204,8 +265,7 @@ export default function App() {
   );
 
   const openBoard = useCallback(
-    async (boardId: string, sessionToken = token) => {
-      if (!sessionToken) return;
+    async (boardId: string, sessionToken = token || undefined) => {
       setError("");
       const [boardResult, versionResult] = await Promise.all([
         getBoard(sessionToken, boardId),
@@ -222,25 +282,25 @@ export default function App() {
   );
 
   useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
     setLoading(true);
     void (async () => {
       try {
-        const session = await getSession(token);
+        const config = await getAuthConfig();
+        if (cancelled) return;
+        setAuthMode(config.mode);
+        const sessionToken = token || undefined;
+        const session = await getSession(sessionToken);
         if (cancelled) return;
         const access = session.workspaces[0];
         if (!access)
           throw new Error("No workspace is available for this account.");
         setIdentity(session.identity);
         setWorkspaceAccess(access);
-        const availableBoards = await refreshBoardList(access, token);
+        const availableBoards = await refreshBoardList(access, sessionToken);
         if (cancelled) return;
         const first = availableBoards[0];
-        if (first) await openBoard(first.id, token);
+        if (first) await openBoard(first.id, sessionToken);
       } catch (caught) {
         if (cancelled) return;
         if (caught instanceof ApiError && caught.status === 401) {
@@ -278,7 +338,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!dirty || !activeBoard || !token || !canEdit || saving.current) return;
+    if (!dirty || !activeBoard || !canEdit || saving.current) return;
     const timer = window.setTimeout(() => {
       const sequence = changeSequence.current;
       const snapshot = structuredClone(activeBoard.document);
@@ -287,7 +347,7 @@ export default function App() {
       saving.current = true;
       setSaveState("saving");
       void saveBoard(
-        token,
+        token || undefined,
         boardId,
         expectedRevision,
         snapshot,
@@ -353,16 +413,16 @@ export default function App() {
   }, [dirty]);
 
   async function addBoard() {
-    if (!workspaceAccess || !token || !canEdit) return;
+    if (!workspaceAccess || !canEdit) return;
     setError("");
     try {
       const result = await createBoard(
-        token,
+        token || undefined,
         workspaceAccess.workspace.id,
         "Untitled board",
       );
-      await refreshBoardList(workspaceAccess, token);
-      await openBoard(result.board.id, token);
+      await refreshBoardList(workspaceAccess, token || undefined);
+      await openBoard(result.board.id, token || undefined);
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -431,17 +491,25 @@ export default function App() {
   }
 
   async function recover(version: BoardVersion) {
-    if (!activeBoard || !token || !canRestore) return;
+    if (!activeBoard || !canRestore) return;
     setError("");
     try {
-      const result = await restoreVersion(token, activeBoard.id, version.id);
+      const result = await restoreVersion(
+        token || undefined,
+        activeBoard.id,
+        version.id,
+      );
       setActiveBoard(result.board);
       setSelectedObjectId(null);
       setDirty(false);
       setSaveState("saved");
-      const versionResult = await listVersions(token, activeBoard.id);
+      const versionResult = await listVersions(
+        token || undefined,
+        activeBoard.id,
+      );
       setVersions(versionResult.versions);
-      if (workspaceAccess) await refreshBoardList(workspaceAccess, token);
+      if (workspaceAccess)
+        await refreshBoardList(workspaceAccess, token || undefined);
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -457,12 +525,17 @@ export default function App() {
     }
   }
 
-  function signOut() {
+  async function signOut() {
     if (
       dirty &&
       !window.confirm("This board still has unsaved changes. Sign out anyway?")
     ) {
       return;
+    }
+    try {
+      await signOutSession();
+    } catch {
+      // Clear local state even if the remote session has already expired.
     }
     localStorage.removeItem(SESSION_KEY);
     setToken("");
@@ -472,7 +545,15 @@ export default function App() {
     setActiveBoard(null);
   }
 
-  if (!token) return <SignInScreen onSignedIn={setToken} />;
+  if (!loading && !identity) {
+    return (
+      <SignInScreen
+        authMode={authMode}
+        initialError={authError || error}
+        onSignedIn={setToken}
+      />
+    );
+  }
 
   if (loading || !identity || !workspaceAccess) {
     return (
