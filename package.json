@@ -12,12 +12,13 @@
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "typecheck": "turbo run typecheck",
-    "test": "pnpm test:foundation",
+    "test": "pnpm test:foundation && pnpm test:api",
     "test:foundation": "node --experimental-strip-types --test packages/board-schema/src/*.test.ts packages/canvas-core/src/*.test.ts packages/authz/src/*.test.ts",
+    "test:api": "node --experimental-strip-types --test apps/api/src/*.test.ts",
     "test:e2e": "pnpm --filter @huddlecanvas/e2e test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm test:foundation && pnpm typecheck && pnpm build"
+    "check": "pnpm test && pnpm typecheck && pnpm build"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

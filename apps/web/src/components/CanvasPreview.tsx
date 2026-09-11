@@ -1,11 +1,30 @@
+import { useRef, type PointerEvent as ReactPointerEvent } from "react";
+
 import type {
   ActionObject,
   BoardDocument,
   BoardObject,
   ChecklistObject,
+  ShapeObject,
   StickyObject,
   TextObject,
 } from "@huddlecanvas/board-schema";
+
+interface CanvasPreviewProps {
+  board: BoardDocument;
+  selectedObjectId?: string | null;
+  onSelect?: (objectId: string | null) => void;
+  onObjectMove?: (objectId: string, x: number, y: number) => void;
+}
+
+interface DragState {
+  objectId: string;
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  originX: number;
+  originY: number;
+}
 
 function objectStyle(object: BoardObject): React.CSSProperties {
   return {
@@ -20,8 +39,8 @@ function objectStyle(object: BoardObject): React.CSSProperties {
 function Sticky({ object }: { object: StickyObject }) {
   return (
     <article
-      className="canvas-object sticky-card"
-      style={{ ...objectStyle(object), background: object.color }}
+      className="object-surface sticky-card"
+      style={{ background: object.color }}
     >
       {object.text}
     </article>
@@ -30,24 +49,27 @@ function Sticky({ object }: { object: StickyObject }) {
 
 function ActionCard({ object }: { object: ActionObject }) {
   return (
-    <article className="canvas-object action-card" style={objectStyle(object)}>
+    <article className="object-surface action-card">
       <div className="card-eyebrow">Action</div>
       <strong>{object.title}</strong>
       <div className="action-meta">
-        <span className="avatar avatar-small">M</span>
-        <span>Due Oct 15</span>
+        <span className="avatar avatar-small">A</span>
+        <span>
+          {object.dueAt
+            ? new Date(object.dueAt).toLocaleDateString()
+            : "No due date"}
+        </span>
       </div>
-      <span className="status-chip status-progress">In progress</span>
+      <span className="status-chip status-progress">
+        {object.status.replace("-", " ")}
+      </span>
     </article>
   );
 }
 
 function Checklist({ object }: { object: ChecklistObject }) {
   return (
-    <article
-      className="canvas-object checklist-card"
-      style={objectStyle(object)}
-    >
+    <article className="object-surface checklist-card">
       <div className="card-eyebrow">Checklist</div>
       <strong>{object.title}</strong>
       <div className="checklist-rows">
@@ -64,68 +86,161 @@ function Checklist({ object }: { object: ChecklistObject }) {
   );
 }
 
-export function CanvasPreview({ board }: { board: BoardDocument }) {
+function Shape({ object }: { object: ShapeObject }) {
+  const width = Math.max(1, object.size.width);
+  const height = Math.max(1, object.size.height);
+  const common = {
+    fill: object.style.fill ?? "transparent",
+    stroke: object.style.stroke,
+    strokeWidth: object.style.strokeWidth,
+    opacity: object.style.opacity,
+    vectorEffect: "non-scaling-stroke" as const,
+  };
+  return (
+    <svg
+      className="object-surface shape-object"
+      viewBox={`0 0 ${width} ${height}`}
+      aria-hidden="true"
+    >
+      {object.shape === "ellipse" ? (
+        <ellipse
+          cx={width / 2}
+          cy={height / 2}
+          rx={width / 2 - 2}
+          ry={height / 2 - 2}
+          {...common}
+        />
+      ) : object.shape === "line" ? (
+        <line x1="2" y1="2" x2={width - 2} y2={height - 2} {...common} />
+      ) : object.shape === "diamond" ? (
+        <polygon
+          points={`${width / 2},2 ${width - 2},${height / 2} ${width / 2},${height - 2} 2,${height / 2}`}
+          {...common}
+        />
+      ) : object.shape === "triangle" ? (
+        <polygon
+          points={`${width / 2},2 ${width - 2},${height - 2} 2,${height - 2}`}
+          {...common}
+        />
+      ) : (
+        <rect
+          x="2"
+          y="2"
+          width={width - 4}
+          height={height - 4}
+          rx={object.shape === "rounded-rectangle" ? 14 : 2}
+          {...common}
+        />
+      )}
+    </svg>
+  );
+}
+
+export function CanvasPreview({
+  board,
+  selectedObjectId = null,
+  onSelect,
+  onObjectMove,
+}: CanvasPreviewProps) {
+  const drag = useRef<DragState | null>(null);
   const objects = Object.values(board.objects).sort((a, b) =>
     a.orderKey.localeCompare(b.orderKey),
   );
+
+  function pointerDown(
+    event: ReactPointerEvent<HTMLElement>,
+    object: BoardObject,
+  ) {
+    event.stopPropagation();
+    onSelect?.(object.id);
+    if (!onObjectMove || object.locked || event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = {
+      objectId: object.id,
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      originX: object.transform.x,
+      originY: object.transform.y,
+    };
+  }
+
+  function pointerMove(event: ReactPointerEvent<HTMLElement>) {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId || !onObjectMove)
+      return;
+    onObjectMove(
+      current.objectId,
+      current.originX + event.clientX - current.clientX,
+      current.originY + event.clientY - current.clientY,
+    );
+  }
+
+  function pointerUp(event: ReactPointerEvent<HTMLElement>) {
+    if (drag.current?.pointerId === event.pointerId) drag.current = null;
+  }
+
+  function renderObject(object: BoardObject) {
+    if (object.type === "frame") {
+      return (
+        <section className="object-surface board-frame">
+          <span>{object.title}</span>
+        </section>
+      );
+    }
+    if (object.type === "text") {
+      return (
+        <div className="object-surface canvas-heading">
+          {(object as TextObject).text}
+        </div>
+      );
+    }
+    if (object.type === "sticky") return <Sticky object={object} />;
+    if (object.type === "action") return <ActionCard object={object} />;
+    if (object.type === "checklist") return <Checklist object={object} />;
+    if (object.type === "shape") return <Shape object={object} />;
+    return null;
+  }
+
   return (
-    <div className="canvas-stage" aria-label="Read-only board model preview">
-      <svg className="connector-layer" viewBox="0 0 930 600" aria-hidden="true">
-        <defs>
-          <marker
-            id="arrow"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" />
-          </marker>
-        </defs>
-        <path d="M668 300 C690 325 710 327 720 350" markerEnd="url(#arrow)" />
-      </svg>
+    <div
+      className="canvas-stage hosted-canvas-stage"
+      aria-label="Editable hosted board"
+      onPointerDown={() => onSelect?.(null)}
+    >
       {objects.map((object) => {
-        if (object.type === "frame")
-          return (
-            <section
-              key={object.id}
-              className="canvas-object board-frame"
-              style={objectStyle(object)}
-            >
-              <span>{object.title}</span>
-            </section>
-          );
-        if (object.type === "text")
-          return (
-            <div
-              key={object.id}
-              className="canvas-object canvas-heading"
-              style={objectStyle(object)}
-            >
-              {(object as TextObject).text}
-            </div>
-          );
-        if (object.type === "sticky")
-          return <Sticky key={object.id} object={object} />;
-        if (object.type === "action")
-          return <ActionCard key={object.id} object={object} />;
-        if (object.type === "checklist")
-          return <Checklist key={object.id} object={object} />;
-        return null;
+        const rendered = renderObject(object);
+        if (!rendered || object.hidden) return null;
+        return (
+          <div
+            key={object.id}
+            className={`canvas-object hosted-object${selectedObjectId === object.id ? " selected" : ""}${onObjectMove && !object.locked ? " movable" : ""}`}
+            style={objectStyle(object)}
+            tabIndex={0}
+            role="button"
+            aria-label={`${object.type} object${object.locked ? ", locked" : ""}`}
+            onPointerDown={(event) => pointerDown(event, object)}
+            onPointerMove={pointerMove}
+            onPointerUp={pointerUp}
+            onPointerCancel={pointerUp}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect?.(object.id);
+              }
+            }}
+          >
+            {rendered}
+          </div>
+        );
       })}
-      <div className="lasso-example" aria-hidden="true">
-        <span>Lasso selection</span>
-      </div>
-      <div className="canvas-legend" aria-label="Canvas distinction legend">
+      <div className="canvas-legend hosted-legend">
         <span>
-          <i className="legend-lasso" />
-          Temporary selection
+          <i className="legend-selected" /> Selected object
         </span>
         <span>
-          <i className="legend-frame" />
-          Persistent frame
+          <i className="legend-durable" /> Autosaved revision
         </span>
       </div>
     </div>
