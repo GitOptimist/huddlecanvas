@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { Pool } from "pg";
 
@@ -19,6 +20,9 @@ import {
 import { DEVELOPMENT_SECRET, buildServer } from "./server.ts";
 
 const production = process.env.NODE_ENV === "production";
+const defaultWebDist = fileURLToPath(
+  new URL("../../web/dist", import.meta.url),
+);
 const allowDevAuth =
   process.env.HUDDLECANVAS_ALLOW_DEV_AUTH === "true" || !production;
 const configuredSecret = process.env.HUDDLECANVAS_SESSION_SECRET;
@@ -145,7 +149,7 @@ const server = buildServer({
   ...(production || process.env.HUDDLECANVAS_WEB_DIST
     ? {
         staticDirectory: resolve(
-          process.env.HUDDLECANVAS_WEB_DIST ?? "apps/web/dist",
+          process.env.HUDDLECANVAS_WEB_DIST ?? defaultWebDist,
         ),
       }
     : {}),

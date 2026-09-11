@@ -25,7 +25,7 @@ services:
       - key: HUDDLECANVAS_LOGGER
         value: "true"
       - key: HUDDLECANVAS_WEB_DIST
-        value: apps/web/dist
+        value: ../web/dist
       - key: HUDDLECANVAS_SESSION_SECRET
         generateValue: true
       - key: DATABASE_URL
