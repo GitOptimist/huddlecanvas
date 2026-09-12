@@ -71,11 +71,7 @@ function ProductBrand({ inverse = false }: { inverse?: boolean }) {
   return (
     <div className={`product-brand${inverse ? " product-brand-inverse" : ""}`}>
       <img
-        src={
-          inverse
-            ? "/getitech-logo-dark.png"
-            : "/getitech-logo-light.png"
-        }
+        src={inverse ? "/getitech-logo-dark.png" : "/getitech-logo-light.png"}
         alt="GETITECH"
       />
       <span className="product-brand-divider" aria-hidden="true" />
@@ -84,9 +80,28 @@ function ProductBrand({ inverse = false }: { inverse?: boolean }) {
   );
 }
 
-function loginError(): string {
+type LoginFeedback = {
+  kind: "error" | "notice";
+  message: string;
+};
+
+function loginFeedback(): LoginFeedback | null {
   const params = new URLSearchParams(window.location.search);
-  if (params.get("auth_error") !== "login_failed") return "";
+  let feedback: LoginFeedback | null = null;
+  if (params.get("auth_notice") === "email_confirmation_sent") {
+    feedback = {
+      kind: "notice",
+      message:
+        "A confirmation email has been sent. Please verify your email, then sign in again.",
+    };
+  } else if (params.get("auth_error") === "login_failed") {
+    feedback = {
+      kind: "error",
+      message: "Sign-in could not be completed. Please try again.",
+    };
+  }
+  if (!feedback) return null;
+  params.delete("auth_notice");
   params.delete("auth_error");
   const query = params.toString();
   window.history.replaceState(
@@ -94,33 +109,33 @@ function loginError(): string {
     "",
     `${window.location.pathname}${query ? `?${query}` : ""}`,
   );
-  return "Sign-in could not be completed. Please try again.";
+  return feedback;
 }
 
 function SignInScreen({
   authMode,
-  initialError,
+  initialFeedback,
   onSignedIn,
 }: {
   authMode: AuthMode;
-  initialError: string;
+  initialFeedback: LoginFeedback | null;
   onSignedIn: (token: string) => void;
 }) {
   const [displayName, setDisplayName] = useState("Alex Rivera");
   const [email, setEmail] = useState("alex@example.com");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(initialError);
+  const [feedback, setFeedback] = useState(initialFeedback);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
-    setError("");
+    setFeedback(null);
     try {
       const result = await createDevSession({ email, displayName });
       localStorage.setItem(SESSION_KEY, result.token);
       onSignedIn(result.token);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setFeedback({ kind: "error", message: errorMessage(caught) });
     } finally {
       setBusy(false);
     }
@@ -188,9 +203,12 @@ function SignInScreen({
                 required
               />
             </label>
-            {error ? (
-              <div className="form-error" role="alert">
-                {error}
+            {feedback ? (
+              <div
+                className={`form-feedback form-feedback-${feedback.kind}`}
+                role={feedback.kind === "error" ? "alert" : "status"}
+              >
+                {feedback.message}
               </div>
             ) : null}
             <button className="primary-action" disabled={busy}>
@@ -209,9 +227,12 @@ function SignInScreen({
               Sign in to open your workspace and continue where your team left
               off.
             </p>
-            {error ? (
-              <div className="form-error" role="alert">
-                {error}
+            {feedback ? (
+              <div
+                className={`form-feedback form-feedback-${feedback.kind}`}
+                role={feedback.kind === "error" ? "alert" : "status"}
+              >
+                {feedback.message}
               </div>
             ) : null}
             {authMode === "oidc" ? (
@@ -242,7 +263,7 @@ export default function App() {
     () => localStorage.getItem(SESSION_KEY) ?? "",
   );
   const [authMode, setAuthMode] = useState<AuthMode>("unavailable");
-  const [authError] = useState(loginError);
+  const [authFeedback] = useState(loginFeedback);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [workspaceAccess, setWorkspaceAccess] =
     useState<WorkspaceAccess | null>(null);
@@ -562,7 +583,9 @@ export default function App() {
     return (
       <SignInScreen
         authMode={authMode}
-        initialError={authError || error}
+        initialFeedback={
+          authFeedback ?? (error ? { kind: "error", message: error } : null)
+        }
         onSignedIn={setToken}
       />
     );

@@ -24,6 +24,7 @@ test("OIDC browser flow uses discovery, PKCE, state, nonce, and verified claims"
   let issuer = "";
   let expectedNonce = "";
   let tokenRequest = "";
+  let emailVerified = true;
   const provider = createServer(async (request, response) => {
     response.setHeader("content-type", "application/json");
     if (request.url === "/.well-known/openid-configuration") {
@@ -46,7 +47,7 @@ test("OIDC browser flow uses discovery, PKCE, state, nonce, and verified claims"
       for await (const chunk of request) tokenRequest += chunk.toString();
       const idToken = await new SignJWT({
         email: "hosted@example.com",
-        email_verified: true,
+        email_verified: emailVerified,
         name: "Hosted Alpha",
         nonce: expectedNonce,
       })
@@ -122,6 +123,23 @@ test("OIDC browser flow uses discovery, PKCE, state, nonce, and verified claims"
         transaction: authorization.transaction,
       }),
       AuthenticationError,
+    );
+
+    emailVerified = false;
+    const unverifiedAuthorization = await client.createAuthorizationRequest({
+      redirectUri,
+      returnTo: "/",
+    });
+    expectedNonce = unverifiedAuthorization.transaction.nonce;
+    await assert.rejects(
+      client.completeAuthorization({
+        callbackUrl: `${redirectUri}?code=unverified-email&state=${unverifiedAuthorization.transaction.state}`,
+        redirectUri,
+        transaction: unverifiedAuthorization.transaction,
+      }),
+      (error: unknown) =>
+        error instanceof AuthenticationError &&
+        error.code === "email_unverified",
     );
   } finally {
     await new Promise<void>((resolve) => provider.close(() => resolve()));

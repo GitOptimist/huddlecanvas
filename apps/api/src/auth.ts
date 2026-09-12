@@ -30,10 +30,19 @@ interface SessionPayload extends SessionIdentity {
   expiresAt: number;
 }
 
+export type AuthenticationErrorCode =
+  "authentication_failed" | "email_unverified";
+
 export class AuthenticationError extends Error {
-  constructor(message = "Authentication is required.") {
+  readonly code: AuthenticationErrorCode;
+
+  constructor(
+    message = "Authentication is required.",
+    code: AuthenticationErrorCode = "authentication_failed",
+  ) {
     super(message);
     this.name = "AuthenticationError";
+    this.code = code;
   }
 }
 

@@ -310,6 +310,7 @@ export class StandardOidcClient implements BrowserOidcClient {
     if (!verifiedEmail || claims.email_verified !== true) {
       throw new AuthenticationError(
         "The identity provider must supply a verified email address.",
+        "email_unverified",
       );
     }
     const displayName =

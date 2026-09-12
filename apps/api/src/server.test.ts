@@ -349,11 +349,17 @@ test("browser OIDC creates a secure cookie session and enforces request origin",
       };
     },
     async completeAuthorization(input) {
-      assert.equal(
+      assert.match(
         input.callbackUrl,
-        "https://staging.huddlecanvas.test/api/v1/auth/callback?code=code-1&state=state-1",
+        /^https:\/\/staging\.huddlecanvas\.test\/api\/v1\/auth\/callback\?code=(?:code-1|unverified-email)&state=state-1$/,
       );
       assert.equal(input.transaction.state, "state-1");
+      if (input.callbackUrl.includes("code=unverified-email")) {
+        throw new AuthenticationError(
+          "The identity provider must supply a verified email address.",
+          "email_unverified",
+        );
+      }
       return {
         externalSubject: "https://identity.example.test|subject-1",
         email: "oidc@example.com",
@@ -437,6 +443,25 @@ test("browser OIDC creates a secure cookie session and enforces request origin",
   assert.match(
     String(logout.headers["set-cookie"]),
     /__Host-huddlecanvas_session=; Path=\/; Max-Age=0/,
+  );
+
+  const unverifiedLogin = await server.inject({
+    method: "GET",
+    url: "/api/v1/auth/login?returnTo=%2Fboards%2Fone",
+  });
+  const unverifiedTransactionCookie = firstCookie(
+    unverifiedLogin.headers["set-cookie"],
+    "huddlecanvas_oidc_transaction",
+  );
+  const unverifiedCallback = await server.inject({
+    method: "GET",
+    url: "/api/v1/auth/callback?code=unverified-email&state=state-1",
+    headers: { cookie: unverifiedTransactionCookie },
+  });
+  assert.equal(unverifiedCallback.statusCode, 302, unverifiedCallback.body);
+  assert.equal(
+    unverifiedCallback.headers.location,
+    "https://staging.huddlecanvas.test/?auth_notice=email_confirmation_sent",
   );
 
   await server.close();

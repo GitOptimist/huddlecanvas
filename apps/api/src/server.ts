@@ -416,9 +416,12 @@ export function buildServer(options: BuildServerOptions = {}) {
     } catch (error) {
       request.log.warn({ error }, "OIDC callback failed");
       reply.header("set-cookie", clearTransaction);
-      return reply.redirect(
-        new URL("/?auth_error=login_failed", publicOrigin).href,
-      );
+      const feedbackPath =
+        error instanceof AuthenticationError &&
+        error.code === "email_unverified"
+          ? "/?auth_notice=email_confirmation_sent"
+          : "/?auth_error=login_failed";
+      return reply.redirect(new URL(feedbackPath, publicOrigin).href);
     }
   });
 
