@@ -3,7 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   BoardDocument,
   BoardObject,
+  ShapeKind,
+  ShapeObject,
   StickyObject,
+  StrokeObject,
+  StrokePoint,
+  StrokeStyle,
+  TextObject,
 } from "@huddlecanvas/board-schema";
 
 import {
@@ -27,19 +33,14 @@ import {
   type Role,
   type WorkspaceAccess,
 } from "./api.ts";
-import { CanvasPreview } from "./components/CanvasPreview.tsx";
-import { Icon, type IconName } from "./components/Icon.tsx";
+import {
+  CanvasPreview,
+  type CanvasPoint,
+} from "./components/CanvasPreview.tsx";
+import { Icon } from "./components/Icon.tsx";
 
 const SESSION_KEY = "huddlecanvas-hosted-session";
 const stickyColors = ["#fef3c7", "#dbeafe", "#dcfce7", "#fce7f3"];
-
-const tools: Array<{ name: IconName; label: string; enabled: boolean }> = [
-  { name: "cursor", label: "Select and move", enabled: true },
-  { name: "note", label: "Add sticky note", enabled: true },
-  { name: "text", label: "Text — coming next", enabled: false },
-  { name: "connector", label: "Connector — coming next", enabled: false },
-  { name: "frame", label: "Frame — coming next", enabled: false },
-];
 
 type SaveState = "saved" | "saving" | "unsaved" | "conflict" | "error";
 
@@ -272,6 +273,7 @@ export default function App() {
   const [role, setRole] = useState<Role>("viewer");
   const [versions, setVersions] = useState<BoardVersion[]>([]);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [error, setError] = useState("");
@@ -287,6 +289,10 @@ export default function App() {
     activeBoard && selectedObjectId
       ? (activeBoard.document.objects[selectedObjectId] ?? null)
       : null;
+
+  useEffect(() => {
+    if (selectedObjectId) setInspectorOpen(true);
+  }, [selectedObjectId]);
 
   const refreshBoardList = useCallback(
     async (access: WorkspaceAccess, sessionToken?: string) => {
@@ -462,7 +468,7 @@ export default function App() {
     }
   }
 
-  function addSticky() {
+  function addSticky(point?: CanvasPoint) {
     if (!identity) return;
     const objectId = `sticky_${crypto.randomUUID()}`;
     updateDocument((document) => {
@@ -476,8 +482,8 @@ export default function App() {
         parentId: null,
         orderKey: document.rootOrder.length.toString().padStart(8, "0"),
         transform: {
-          x: 120 + (index % 4) * 205,
-          y: 150 + Math.floor(index / 4) * 155,
+          x: Math.round((point?.x ?? 210 + (index % 4) * 205) - 90),
+          y: Math.round((point?.y ?? 215 + Math.floor(index / 4) * 155) - 62),
           rotation: 0,
           scaleX: 1,
           scaleY: 1,
@@ -496,6 +502,144 @@ export default function App() {
       document.rootOrder.push(objectId);
     }, "Added sticky note");
     setSelectedObjectId(objectId);
+  }
+
+  function addText(point: CanvasPoint) {
+    if (!identity) return;
+    const objectId = `text_${crypto.randomUUID()}`;
+    updateDocument((document) => {
+      const timestamp = new Date().toISOString();
+      const object: TextObject = {
+        id: objectId,
+        type: "text",
+        parentId: null,
+        orderKey: document.rootOrder.length.toString().padStart(8, "0"),
+        transform: {
+          x: Math.round(point.x - 110),
+          y: Math.round(point.y - 22),
+          rotation: 0,
+          scaleX: 1,
+          scaleY: 1,
+        },
+        size: { width: 220, height: 44 },
+        locked: false,
+        hidden: false,
+        createdAt: timestamp,
+        createdBy: identity.userId,
+        updatedAt: timestamp,
+        updatedBy: identity.userId,
+        text: "Type something",
+        altText: "",
+        style: {
+          color: "#172033",
+          fontFamily: "Inter, ui-sans-serif, system-ui",
+          fontSize: 22,
+          fontWeight: 600,
+          textAlign: "left",
+        },
+      };
+      document.objects[objectId] = object;
+      document.rootOrder.push(objectId);
+    }, "Added text");
+    setSelectedObjectId(objectId);
+  }
+
+  function addShape(point: CanvasPoint, shape: ShapeKind) {
+    if (!identity) return;
+    const objectId = `shape_${crypto.randomUUID()}`;
+    updateDocument(
+      (document) => {
+        const timestamp = new Date().toISOString();
+        const line = shape === "line";
+        const object: ShapeObject = {
+          id: objectId,
+          type: "shape",
+          parentId: null,
+          orderKey: document.rootOrder.length.toString().padStart(8, "0"),
+          transform: {
+            x: Math.round(point.x - 70),
+            y: Math.round(point.y - (line ? 35 : 55)),
+            rotation: 0,
+            scaleX: 1,
+            scaleY: 1,
+          },
+          size: { width: 140, height: line ? 70 : 110 },
+          locked: false,
+          hidden: false,
+          createdAt: timestamp,
+          createdBy: identity.userId,
+          updatedAt: timestamp,
+          updatedBy: identity.userId,
+          shape,
+          style: {
+            stroke: "#6256d9",
+            strokeWidth: 2.5,
+            fill: line ? null : "#f5f3ff",
+            opacity: 1,
+          },
+        };
+        document.objects[objectId] = object;
+        document.rootOrder.push(objectId);
+      },
+      `Added ${shape.replace("-", " ")}`,
+    );
+    setSelectedObjectId(objectId);
+  }
+
+  function addStroke(points: StrokePoint[], style: StrokeStyle) {
+    if (!identity || points.length < 2) return;
+    const objectId = `stroke_${crypto.randomUUID()}`;
+    updateDocument(
+      (document) => {
+        const timestamp = new Date().toISOString();
+        const minX = Math.min(...points.map((point) => point.x));
+        const minY = Math.min(...points.map((point) => point.y));
+        const maxX = Math.max(...points.map((point) => point.x));
+        const maxY = Math.max(...points.map((point) => point.y));
+        const object: StrokeObject = {
+          id: objectId,
+          type: "stroke",
+          parentId: null,
+          orderKey: document.rootOrder.length.toString().padStart(8, "0"),
+          transform: {
+            x: minX,
+            y: minY,
+            rotation: 0,
+            scaleX: 1,
+            scaleY: 1,
+          },
+          size: {
+            width: Math.max(1, maxX - minX),
+            height: Math.max(1, maxY - minY),
+          },
+          locked: false,
+          hidden: false,
+          createdAt: timestamp,
+          createdBy: identity.userId,
+          updatedAt: timestamp,
+          updatedBy: identity.userId,
+          points: points.map((point) => ({
+            ...point,
+            x: point.x - minX,
+            y: point.y - minY,
+          })),
+          style,
+        };
+        document.objects[objectId] = object;
+        document.rootOrder.push(objectId);
+      },
+      style.opacity < 1 ? "Added highlight" : "Added pen stroke",
+    );
+  }
+
+  function eraseStroke(objectId: string) {
+    updateDocument((document) => {
+      const object = document.objects[objectId];
+      if (!object || object.type !== "stroke" || object.locked) return;
+      delete document.objects[objectId];
+      document.rootOrder = document.rootOrder.filter((id) => id !== objectId);
+    }, "Erased ink");
+    if (selectedObjectId === objectId) setSelectedObjectId(null);
   }
 
   function moveObject(objectId: string, x: number, y: number) {
@@ -522,6 +666,17 @@ export default function App() {
         updatedBy: identity.userId,
       });
     }, "Edited sticky note");
+  }
+
+  function updateSelectedText(text: string) {
+    if (!selectedObjectId || !identity) return;
+    updateDocument((document) => {
+      const object = document.objects[selectedObjectId];
+      if (!object || object.type !== "text") return;
+      object.text = text;
+      object.updatedAt = new Date().toISOString();
+      object.updatedBy = identity.userId;
+    }, "Edited text");
   }
 
   async function recover(version: BoardVersion) {
@@ -612,7 +767,7 @@ export default function App() {
     <div className="app-shell hosted-shell">
       <aside className="sidebar">
         <ProductBrand />
-        <button className="workspace-switcher" type="button">
+        <div className="workspace-switcher">
           <span className="workspace-avatar">
             {workspaceAccess.workspace.name[0]?.toUpperCase()}
           </span>
@@ -620,18 +775,11 @@ export default function App() {
             <small>Workspace</small>
             {workspaceAccess.workspace.name}
           </span>
-          <Icon name="chevron-down" size={15} />
-        </button>
+        </div>
         <nav aria-label="Workspace">
           <button className="nav-item active" aria-current="page">
             <Icon name="board" /> Boards
             <span className="nav-count">{boards.length}</span>
-          </button>
-          <button className="nav-item" disabled>
-            <Icon name="clock" /> Recent
-          </button>
-          <button className="nav-item" disabled>
-            <Icon name="grid" /> Templates
           </button>
         </nav>
         <div className="sidebar-section">
@@ -713,6 +861,16 @@ export default function App() {
             <span className="revision-label">
               Revision {activeBoard?.revision ?? "—"}
             </span>
+            <button
+              className={
+                inspectorOpen ? "activity-toggle active" : "activity-toggle"
+              }
+              type="button"
+              aria-pressed={inspectorOpen}
+              onClick={() => setInspectorOpen((open) => !open)}
+            >
+              <Icon name="clock" size={15} /> History
+            </button>
           </div>
         </header>
 
@@ -741,36 +899,28 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="content-grid">
+        <div
+          className={
+            inspectorOpen ? "content-grid" : "content-grid inspector-closed"
+          }
+        >
           <section className="canvas-panel" id="board">
-            <div
-              className="canvas-toolbar"
-              role="toolbar"
-              aria-label="Canvas tools"
-            >
-              {tools.map((tool, index) => (
-                <button
-                  key={tool.label}
-                  className={index === 0 ? "tool-button active" : "tool-button"}
-                  disabled={!tool.enabled || !activeBoard || !canEdit}
-                  title={tool.label}
-                  onClick={tool.name === "note" ? addSticky : undefined}
-                >
-                  <Icon name={tool.name} />
-                  <span>{tool.label}</span>
-                </button>
-              ))}
-              <span className="toolbar-divider" />
-              <span className="durable-indicator">
-                <Icon name="cloud-check" size={15} /> Durable alpha
-              </span>
-            </div>
             {activeBoard ? (
               <CanvasPreview
                 board={activeBoard.document}
+                canEdit={canEdit}
                 selectedObjectId={selectedObjectId}
                 onSelect={setSelectedObjectId}
-                {...(canEdit ? { onObjectMove: moveObject } : {})}
+                {...(canEdit
+                  ? {
+                      onObjectMove: moveObject,
+                      onAddSticky: addSticky,
+                      onAddText: addText,
+                      onAddShape: addShape,
+                      onAddStroke: addStroke,
+                      onEraseStroke: eraseStroke,
+                    }
+                  : {})}
               />
             ) : (
               <div className="empty-board-state">
@@ -778,28 +928,29 @@ export default function App() {
                 <strong>Create your first board</strong>
               </div>
             )}
-            <div className="zoom-control">
-              <button disabled aria-label="Zoom out">
-                −
-              </button>
-              <span>100%</span>
-              <button disabled aria-label="Zoom in">
-                +
-              </button>
-            </div>
           </section>
 
-          <aside className="inspector" aria-label="Board details and recovery">
+          <aside
+            className="inspector"
+            aria-label="Selection and board history"
+            hidden={!inspectorOpen}
+          >
             <div className="inspector-heading">
               <div className="inspector-icon">
-                <Icon name="cloud-check" />
+                <Icon name={selectedObject ? "cursor" : "clock"} />
               </div>
               <div>
-                <span>M3.2 durability gate</span>
-                <h2>
-                  {selectedObject ? "Object inspector" : "Board activity"}
-                </h2>
+                <span>{selectedObject ? "Selected" : "Board"}</span>
+                <h2>{selectedObject ? "Edit object" : "History"}</h2>
               </div>
+              <button
+                className="inspector-close"
+                type="button"
+                aria-label="Close inspector"
+                onClick={() => setInspectorOpen(false)}
+              >
+                ×
+              </button>
             </div>
 
             {selectedObject?.type === "sticky" ? (
@@ -832,19 +983,32 @@ export default function App() {
                 </div>
                 <p>Drag the note on the board to reposition it.</p>
               </section>
-            ) : (
-              <section className="durability-card">
-                <div>
-                  <Icon name="database" />
-                  <strong>Durable repository</strong>
-                </div>
-                <p>
-                  Board documents are validated, saved atomically, and guarded
-                  by optimistic revisions before each write.
-                </p>
-                <span className="status-chip">Operational</span>
+            ) : selectedObject?.type === "text" ? (
+              <section className="object-editor">
+                <label>
+                  Text
+                  <textarea
+                    value={selectedObject.text}
+                    disabled={!canEdit}
+                    onChange={(event) => updateSelectedText(event.target.value)}
+                  />
+                </label>
+                <p>Drag the text on the board to reposition it.</p>
               </section>
-            )}
+            ) : selectedObject ? (
+              <section className="selection-summary">
+                <span>{selectedObject.type}</span>
+                <strong>
+                  {selectedObject.locked
+                    ? "This object is locked"
+                    : "Drag to reposition"}
+                </strong>
+                <small>
+                  {Math.round(selectedObject.size.width)} ×{" "}
+                  {Math.round(selectedObject.size.height)} px
+                </small>
+              </section>
+            ) : null}
 
             <section className="inspector-section version-section">
               <div className="section-title">
@@ -874,15 +1038,6 @@ export default function App() {
                 ))}
               </div>
             </section>
-
-            <div className="boundary-note hosted-boundary">
-              <Icon name="shield" size={16} />
-              <span>
-                <strong>Honest boundary</strong>
-                Signed local-alpha identity and single-node durable storage are
-                active. Realtime transport is not yet enabled.
-              </span>
-            </div>
           </aside>
         </div>
       </main>

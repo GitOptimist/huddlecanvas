@@ -4,25 +4,28 @@
 
 Branch `m3/hosted-alpha` starts the production-shaped application while tag `prototype-v8` preserves the portable research build. The repository root `index.html` is intentionally unchanged.
 
-M3.1 currently provides:
+The current M3.5 slice provides:
 
 - a pnpm/Turborepo workspace;
-- a React/TypeScript read-only model proof;
+- a React/TypeScript hosted canvas;
 - one versioned canonical board schema with validation and deterministic serialization;
 - a read-only v8 importer with an explicit loss report;
 - pure board commands for add, remove, move, resize, lock, reparent, reorder, and rename;
 - spatial lasso hit-testing that is separate from persistent frame objects;
 - a capability-based authorization matrix;
 - API and realtime service contracts with honest implementation boundaries;
-- dependency-free foundation tests and representative migration fixtures.
+- local and external OIDC session flows;
+- file or PostgreSQL board persistence, autosave, version history, and recovery;
+- select, pan, pen, highlighter, stroke eraser, sticky note, text, shape, zoom, and fit interactions;
+- foundation, API, build, typecheck, and browser test coverage.
 
-Authentication, cloud storage, realtime transport, guest links, and production editing are **not implemented** at this checkpoint.
+Realtime transport, guest links, asset storage, and full v8 workflow parity are **not implemented** at this checkpoint.
 
 ## Repository map
 
 ```text
-apps/web/                 React read-only board-model proof
-apps/api/                 Fastify service boundary and health metadata
+apps/web/                 React hosted canvas and authenticated workspace shell
+apps/api/                 Fastify auth, board, persistence, and web-serving boundary
 apps/realtime/            Presence/command protocol contract (no transport yet)
 packages/board-schema/    Canonical document, validation, migrations, v8 importer
 packages/canvas-core/     Pure commands and geometry
@@ -47,7 +50,7 @@ pnpm install
 pnpm --filter @huddlecanvas/web dev
 ```
 
-Open `http://localhost:5173`. The toolbar is deliberately non-interactive and labeled as a model proof; this prevents a polished mockup from being mistaken for durable editing.
+Open `http://localhost:5173`. In development, configure dev auth as documented in `.env.example`; staging uses external OIDC. Canvas changes autosave through the API and appear in version history.
 
 ## Build and check
 
@@ -65,4 +68,4 @@ Representative fixtures live in `packages/board-schema/fixtures`.
 
 ## Next vertical slice
 
-M3.2 should implement authentication, workspace/board metadata, and a durable board repository behind the API. Use the capability matrix on every server mutation. A single-user save/reopen flow with version creation and recovery is the acceptance gate before realtime work begins.
+Continue M3.5 with deeper selection and editing parity: lasso/multi-select, resize and rotate handles, contextual object actions, undo/redo, deletion, duplicate, lock, grouping, and keyboard workflows. Keep server capabilities authoritative and persist every canonical document mutation through the existing autosave/version boundary.

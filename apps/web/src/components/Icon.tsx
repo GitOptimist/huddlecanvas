@@ -12,16 +12,21 @@ export type IconName =
   | "connector"
   | "cursor"
   | "database"
+  | "eraser"
+  | "fit"
   | "frame"
   | "grid"
   | "hand"
+  | "highlighter"
   | "history"
   | "layers"
   | "logout"
   | "note"
+  | "pen"
   | "plus"
   | "refresh"
   | "search"
+  | "shapes"
   | "shield"
   | "text";
 
@@ -85,6 +90,18 @@ export function Icon({ name, size = 18, ...props }: IconProps) {
         <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
       </>
     ),
+    eraser: (
+      <>
+        <path d="m16.5 3.5 4 4L10 18H6l-3-3z" />
+        <path d="m12.5 7.5 4 4M6 18h13" />
+      </>
+    ),
+    fit: (
+      <>
+        <path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5" />
+        <rect x="7" y="7" width="10" height="10" rx="1" />
+      </>
+    ),
     frame: (
       <>
         <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
@@ -101,6 +118,12 @@ export function Icon({ name, size = 18, ...props }: IconProps) {
     ),
     hand: (
       <path d="M7 11V7a1.5 1.5 0 0 1 3 0v3-5a1.5 1.5 0 0 1 3 0v5-4a1.5 1.5 0 0 1 3 0v5-2a1.5 1.5 0 0 1 3 0v4c0 5-3 8-7 8h-1c-2 0-3-1-4-3l-3-4a1.7 1.7 0 0 1 3-2z" />
+    ),
+    highlighter: (
+      <>
+        <path d="m15 4 5 5-9.5 9.5H5v-5z" />
+        <path d="m12 7 5 5M3 21h13" />
+      </>
     ),
     history: (
       <>
@@ -120,6 +143,12 @@ export function Icon({ name, size = 18, ...props }: IconProps) {
       </>
     ),
     note: <path d="M5 4h14v11l-5 5H5zM14 20v-5h5" />,
+    pen: (
+      <>
+        <path d="m14 4 6 6L9 21H3v-6z" />
+        <path d="m12 6 6 6M3 15l6 6" />
+      </>
+    ),
     plus: <path d="M12 5v14M5 12h14" />,
     refresh: (
       <>
@@ -131,6 +160,12 @@ export function Icon({ name, size = 18, ...props }: IconProps) {
       <>
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-4-4" />
+      </>
+    ),
+    shapes: (
+      <>
+        <rect x="3" y="4" width="8" height="8" rx="1" />
+        <circle cx="16.5" cy="15.5" r="4.5" />
       </>
     ),
     shield: (

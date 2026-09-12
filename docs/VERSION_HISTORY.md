@@ -2,17 +2,17 @@
 
 This repository preserves the historical prototype source files that were available from the project conversation.
 
-| Version | Working name | Main progression | Archive path |
-|---|---|---|---|
-| v1 | FlowBoard | Basic portable whiteboard | `archive/v1-flowboard/index.html` |
-| v1 portable | FlowBoard Portable | Shareable single-file package | `archive/v1-portable/index.html` |
-| v2 | FlowBoard Pro | Faster vector history, palettes, autosave, editable board files | `archive/v2-pro/index.html` |
-| v3 | FlowBoard Studio | Multi-board workspace, text fix, fullscreen timer, action/AI UI | `archive/v3-studio/index.html` |
-| v4 | FlowBoard research build | PDF export, paste/annotation, pro icons/templates, research direction | `archive/v4-research/index.html` |
-| v5 | GETITECH Board | GETITECH branding and UI refinement | `archive/v5-getitech-board/index.html` |
-| v6 | Getitech Canvas | Board management, centering, pens/backgrounds/work-over-content improvements | `archive/v6-getitech-canvas/index.html` |
-| v7 | Getitech Canvas | Facilitation, grouping/checklist/vote/QA expansion | `archive/v7-getitech-canvas/index.html` |
-| v8 | HuddleCanvas | Working rebrand, bulk board management, advanced selection/shapes/frames/AI quiz prototypes | `archive/v8-huddlecanvas/index.html` |
+| Version     | Working name             | Main progression                                                                            | Archive path                            |
+| ----------- | ------------------------ | ------------------------------------------------------------------------------------------- | --------------------------------------- |
+| v1          | FlowBoard                | Basic portable whiteboard                                                                   | `archive/v1-flowboard/index.html`       |
+| v1 portable | FlowBoard Portable       | Shareable single-file package                                                               | `archive/v1-portable/index.html`        |
+| v2          | FlowBoard Pro            | Faster vector history, palettes, autosave, editable board files                             | `archive/v2-pro/index.html`             |
+| v3          | FlowBoard Studio         | Multi-board workspace, text fix, fullscreen timer, action/AI UI                             | `archive/v3-studio/index.html`          |
+| v4          | FlowBoard research build | PDF export, paste/annotation, pro icons/templates, research direction                       | `archive/v4-research/index.html`        |
+| v5          | GETITECH Board           | GETITECH branding and UI refinement                                                         | `archive/v5-getitech-board/index.html`  |
+| v6          | Getitech Canvas          | Board management, centering, pens/backgrounds/work-over-content improvements                | `archive/v6-getitech-canvas/index.html` |
+| v7          | Getitech Canvas          | Facilitation, grouping/checklist/vote/QA expansion                                          | `archive/v7-getitech-canvas/index.html` |
+| v8          | HuddleCanvas             | Working rebrand, bulk board management, advanced selection/shapes/frames/AI quiz prototypes | `archive/v8-huddlecanvas/index.html`    |
 
 The root `index.html` is a copy of the current v8 prototype.
 
@@ -38,5 +38,18 @@ The root `index.html` is a copy of the current v8 prototype.
 - Added pure command/geometry foundations, including lock enforcement, connector cleanup and spatial lasso selection independent of frame objects.
 - Added a capability-based role policy, documented API/realtime boundaries, architecture decisions, CI, fixtures and automated foundation tests.
 - Kept the UI honest: the new professional model proof is read-only until authentication, persistence and authoritative editing exist.
+
+## M3.2–M3.4 Hosted Alpha durability and staging
+
+- Added authenticated workspaces, capability-enforced board APIs, durable file/PostgreSQL repositories, optimistic revisions, autosave, version history, and recovery.
+- Added external OIDC browser sign-in and deployed the same-origin production web/API service through a Render Blueprint.
+- Refined the staging sign-in experience and provided explicit email-verification feedback.
+
+## M3.5 Core canvas experience
+
+- Replaced the hosted model-proof toolbar with working Select, Hand, Pen, Highlighter, Eraser, Sticky note, Text, and Shape tools.
+- Added pointer and stylus stroke capture, persisted canonical stroke objects, safe stroke erasing, one-click object placement, and object movement at any zoom level.
+- Added wheel and button zoom, board panning, reset, fit-to-content, keyboard shortcuts, and a collapsible selection/history inspector.
+- Removed internal milestone and engineering-boundary language from the customer-facing canvas.
 
 Historical files are for traceability and regression/reference. New feature work should target the root app or the future Hosted Alpha branch, not the archive.

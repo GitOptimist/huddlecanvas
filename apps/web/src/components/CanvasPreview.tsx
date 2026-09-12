@@ -1,37 +1,143 @@
-import { useRef, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
 
 import type {
   ActionObject,
   BoardDocument,
   BoardObject,
   ChecklistObject,
+  ShapeKind,
   ShapeObject,
   StickyObject,
+  StrokeObject,
+  StrokePoint,
+  StrokeStyle,
   TextObject,
 } from "@huddlecanvas/board-schema";
 
+import { Icon, type IconName } from "./Icon.tsx";
+
+export interface CanvasPoint {
+  x: number;
+  y: number;
+}
+
+export type CanvasTool =
+  | "select"
+  | "hand"
+  | "pen"
+  | "highlighter"
+  | "eraser"
+  | "sticky"
+  | "text"
+  | "shape";
+
 interface CanvasPreviewProps {
   board: BoardDocument;
+  canEdit?: boolean;
   selectedObjectId?: string | null;
   onSelect?: (objectId: string | null) => void;
   onObjectMove?: (objectId: string, x: number, y: number) => void;
+  onAddSticky?: (point: CanvasPoint) => void;
+  onAddText?: (point: CanvasPoint) => void;
+  onAddShape?: (point: CanvasPoint, shape: ShapeKind) => void;
+  onAddStroke?: (points: StrokePoint[], style: StrokeStyle) => void;
+  onEraseStroke?: (objectId: string) => void;
 }
 
-interface DragState {
-  objectId: string;
-  pointerId: number;
-  clientX: number;
-  clientY: number;
-  originX: number;
-  originY: number;
+interface ViewportState {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
+type Gesture =
+  | {
+      kind: "move";
+      objectId: string;
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      originX: number;
+      originY: number;
+    }
+  | {
+      kind: "pan";
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      panX: number;
+      panY: number;
+    }
+  | {
+      kind: "draw";
+      pointerId: number;
+      points: StrokePoint[];
+      style: StrokeStyle;
+    }
+  | { kind: "erase"; pointerId: number };
+
+const WORLD_WIDTH = 2400;
+const WORLD_HEIGHT = 1600;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 2.5;
+
+const primaryTools: Array<{
+  id: CanvasTool;
+  icon: IconName;
+  label: string;
+  shortcut: string;
+}> = [
+  { id: "select", icon: "cursor", label: "Select", shortcut: "V" },
+  { id: "hand", icon: "hand", label: "Pan", shortcut: "H" },
+  { id: "pen", icon: "pen", label: "Pen", shortcut: "P" },
+  {
+    id: "highlighter",
+    icon: "highlighter",
+    label: "Highlighter",
+    shortcut: "K",
+  },
+  { id: "eraser", icon: "eraser", label: "Eraser", shortcut: "E" },
+  { id: "sticky", icon: "note", label: "Sticky note", shortcut: "S" },
+  { id: "text", icon: "text", label: "Text", shortcut: "T" },
+  { id: "shape", icon: "shapes", label: "Shapes", shortcut: "R" },
+];
+
+const shapeChoices: Array<{ id: ShapeKind; label: string }> = [
+  { id: "rectangle", label: "Rectangle" },
+  { id: "rounded-rectangle", label: "Rounded" },
+  { id: "ellipse", label: "Ellipse" },
+  { id: "triangle", label: "Triangle" },
+  { id: "diamond", label: "Diamond" },
+  { id: "hexagon", label: "Hexagon" },
+  { id: "star", label: "Star" },
+  { id: "line", label: "Line" },
+];
+
+const inkColors = ["#172033", "#6256d9", "#2563eb", "#dc2626", "#15803d"];
+
+function clampZoom(value: number): number {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
+
+function isEditingTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  return Boolean(
+    element?.closest("input, textarea, select, [contenteditable='true']"),
+  );
 }
 
 function objectStyle(object: BoardObject): React.CSSProperties {
   return {
     left: object.transform.x,
     top: object.transform.y,
-    width: object.size.width,
-    height: object.size.height,
+    width: Math.max(1, object.size.width),
+    height: Math.max(1, object.size.height),
     transform: `rotate(${object.transform.rotation}deg) scale(${object.transform.scaleX}, ${object.transform.scaleY})`,
   };
 }
@@ -96,6 +202,11 @@ function Shape({ object }: { object: ShapeObject }) {
     opacity: object.style.opacity,
     vectorEffect: "non-scaling-stroke" as const,
   };
+  const star = Array.from({ length: 10 }, (_, index) => {
+    const angle = -Math.PI / 2 + (index * Math.PI) / 5;
+    const radius = index % 2 === 0 ? 0.47 : 0.22;
+    return `${width / 2 + Math.cos(angle) * width * radius},${height / 2 + Math.sin(angle) * height * radius}`;
+  }).join(" ");
   return (
     <svg
       className="object-surface shape-object"
@@ -122,6 +233,13 @@ function Shape({ object }: { object: ShapeObject }) {
           points={`${width / 2},2 ${width - 2},${height - 2} 2,${height - 2}`}
           {...common}
         />
+      ) : object.shape === "hexagon" ? (
+        <polygon
+          points={`${width * 0.25},2 ${width * 0.75},2 ${width - 2},${height / 2} ${width * 0.75},${height - 2} ${width * 0.25},${height - 2} 2,${height / 2}`}
+          {...common}
+        />
+      ) : object.shape === "star" ? (
+        <polygon points={star} {...common} />
       ) : (
         <rect
           x="2"
@@ -136,27 +254,375 @@ function Shape({ object }: { object: ShapeObject }) {
   );
 }
 
+function Stroke({ object }: { object: StrokeObject }) {
+  return (
+    <svg
+      className="object-surface stroke-object"
+      viewBox={`0 0 ${Math.max(1, object.size.width)} ${Math.max(1, object.size.height)}`}
+      aria-hidden="true"
+    >
+      <polyline
+        points={object.points.map((point) => `${point.x},${point.y}`).join(" ")}
+        fill="none"
+        stroke={object.style.color}
+        strokeWidth={object.style.width}
+        strokeOpacity={object.style.opacity}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
+function distanceToSegment(
+  point: CanvasPoint,
+  start: CanvasPoint,
+  end: CanvasPoint,
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (dx === 0 && dy === 0)
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) /
+        (dx * dx + dy * dy),
+    ),
+  );
+  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+}
+
+function strokeAtPoint(
+  objects: BoardObject[],
+  point: CanvasPoint,
+  tolerance: number,
+): StrokeObject | null {
+  for (const candidate of [...objects].reverse()) {
+    if (candidate.type !== "stroke" || candidate.hidden) continue;
+    const points = candidate.points.map((strokePoint) => ({
+      x: candidate.transform.x + strokePoint.x,
+      y: candidate.transform.y + strokePoint.y,
+    }));
+    for (let index = 1; index < points.length; index += 1) {
+      if (
+        distanceToSegment(point, points[index - 1]!, points[index]!) <=
+        tolerance + candidate.style.width / 2
+      ) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
 export function CanvasPreview({
   board,
+  canEdit = false,
   selectedObjectId = null,
   onSelect,
   onObjectMove,
+  onAddSticky,
+  onAddText,
+  onAddShape,
+  onAddStroke,
+  onEraseStroke,
 }: CanvasPreviewProps) {
-  const drag = useRef<DragState | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const gesture = useRef<Gesture | null>(null);
+  const erasedDuringGesture = useRef(new Set<string>());
+  const [tool, setTool] = useState<CanvasTool>("select");
+  const [shape, setShape] = useState<ShapeKind>("rectangle");
+  const [inkColor, setInkColor] = useState("#172033");
+  const [spacePanning, setSpacePanning] = useState(false);
+  const [draftStroke, setDraftStroke] = useState<{
+    points: StrokePoint[];
+    style: StrokeStyle;
+  } | null>(null);
+  const [viewport, setViewport] = useState<ViewportState>({
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+  });
+
   const objects = Object.values(board.objects).sort((a, b) =>
     a.orderKey.localeCompare(b.orderKey),
   );
+  const visibleObjects = objects.filter((object) => !object.hidden);
+  const effectiveTool = spacePanning ? "hand" : tool;
 
-  function pointerDown(
-    event: ReactPointerEvent<HTMLElement>,
+  useEffect(() => {
+    function keyDown(event: KeyboardEvent) {
+      if (isEditingTarget(event.target)) return;
+      if (event.code === "Space") {
+        event.preventDefault();
+        setSpacePanning(true);
+        return;
+      }
+      const shortcut: Record<string, CanvasTool> = {
+        v: "select",
+        h: "hand",
+        p: "pen",
+        k: "highlighter",
+        e: "eraser",
+        s: "sticky",
+        t: "text",
+        r: "shape",
+      };
+      if (event.key === "Escape") setTool("select");
+      const next = shortcut[event.key.toLowerCase()];
+      if (next && (canEdit || next === "select" || next === "hand")) {
+        event.preventDefault();
+        setTool(next);
+      }
+    }
+    function keyUp(event: KeyboardEvent) {
+      if (event.code === "Space") setSpacePanning(false);
+    }
+    window.addEventListener("keydown", keyDown);
+    window.addEventListener("keyup", keyUp);
+    return () => {
+      window.removeEventListener("keydown", keyDown);
+      window.removeEventListener("keyup", keyUp);
+    };
+  }, [canEdit]);
+
+  function canvasPoint(clientX: number, clientY: number): CanvasPoint {
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    if (!bounds) return { x: 0, y: 0 };
+    return {
+      x: (clientX - bounds.left - viewport.panX) / viewport.zoom,
+      y: (clientY - bounds.top - viewport.panY) / viewport.zoom,
+    };
+  }
+
+  function zoomAt(clientX: number, clientY: number, nextZoom: number) {
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    setViewport((current) => {
+      const zoom = clampZoom(nextZoom);
+      const localX = clientX - bounds.left;
+      const localY = clientY - bounds.top;
+      const boardX = (localX - current.panX) / current.zoom;
+      const boardY = (localY - current.panY) / current.zoom;
+      return {
+        zoom,
+        panX: localX - boardX * zoom,
+        panY: localY - boardY * zoom,
+      };
+    });
+  }
+
+  function zoomFromCenter(multiplier: number) {
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    zoomAt(
+      bounds.left + bounds.width / 2,
+      bounds.top + bounds.height / 2,
+      viewport.zoom * multiplier,
+    );
+  }
+
+  function fitContent() {
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    if (!bounds || visibleObjects.length === 0) {
+      setViewport({ zoom: 1, panX: 0, panY: 0 });
+      return;
+    }
+    const left = Math.min(
+      ...visibleObjects.map((object) => object.transform.x),
+    );
+    const top = Math.min(...visibleObjects.map((object) => object.transform.y));
+    const right = Math.max(
+      ...visibleObjects.map(
+        (object) => object.transform.x + Math.max(1, object.size.width),
+      ),
+    );
+    const bottom = Math.max(
+      ...visibleObjects.map(
+        (object) => object.transform.y + Math.max(1, object.size.height),
+      ),
+    );
+    const padding = 120;
+    const width = Math.max(1, right - left);
+    const height = Math.max(1, bottom - top);
+    const zoom = clampZoom(
+      Math.min(
+        (bounds.width - padding * 2) / width,
+        (bounds.height - padding * 2) / height,
+      ),
+    );
+    setViewport({
+      zoom,
+      panX: (bounds.width - width * zoom) / 2 - left * zoom,
+      panY: (bounds.height - height * zoom) / 2 - top * zoom,
+    });
+  }
+
+  function wheel(event: ReactWheelEvent<HTMLDivElement>) {
+    if ((event.target as HTMLElement).closest(".canvas-toolbar")) return;
+    event.preventDefault();
+    zoomAt(
+      event.clientX,
+      event.clientY,
+      viewport.zoom * Math.exp(-event.deltaY * 0.0015),
+    );
+  }
+
+  function eraseAt(point: CanvasPoint) {
+    if (!onEraseStroke) return;
+    const target = strokeAtPoint(objects, point, 9 / viewport.zoom);
+    if (!target || erasedDuringGesture.current.has(target.id)) return;
+    erasedDuringGesture.current.add(target.id);
+    onEraseStroke(target.id);
+  }
+
+  function pointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (
+      (event.target as HTMLElement).closest(
+        ".canvas-toolbar, .zoom-control, .canvas-mode-hint",
+      )
+    ) {
+      return;
+    }
+    const shouldPan =
+      effectiveTool === "hand" || event.button === 1 || event.button === 2;
+    if (shouldPan) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      gesture.current = {
+        kind: "pan",
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        panX: viewport.panX,
+        panY: viewport.panY,
+      };
+      return;
+    }
+    if (event.button !== 0) return;
+    const point = canvasPoint(event.clientX, event.clientY);
+    if (effectiveTool === "pen" || effectiveTool === "highlighter") {
+      if (!canEdit || !onAddStroke) return;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      const style: StrokeStyle =
+        effectiveTool === "highlighter"
+          ? { color: inkColor, width: 18, opacity: 0.28 }
+          : { color: inkColor, width: 3, opacity: 1 };
+      const points: StrokePoint[] = [
+        {
+          ...point,
+          ...(event.pressure ? { pressure: event.pressure } : {}),
+          time: Date.now(),
+        },
+      ];
+      gesture.current = {
+        kind: "draw",
+        pointerId: event.pointerId,
+        points,
+        style,
+      };
+      setDraftStroke({ points, style });
+      return;
+    }
+    if (effectiveTool === "eraser") {
+      if (!canEdit) return;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      erasedDuringGesture.current.clear();
+      gesture.current = { kind: "erase", pointerId: event.pointerId };
+      eraseAt(point);
+      return;
+    }
+    if (!canEdit) return;
+    if (effectiveTool === "sticky") {
+      onAddSticky?.(point);
+      setTool("select");
+    } else if (effectiveTool === "text") {
+      onAddText?.(point);
+      setTool("select");
+    } else if (effectiveTool === "shape") {
+      onAddShape?.(point, shape);
+      setTool("select");
+    } else {
+      onSelect?.(null);
+    }
+  }
+
+  function pointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const current = gesture.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    if (current.kind === "pan") {
+      setViewport((view) => ({
+        ...view,
+        panX: current.panX + event.clientX - current.clientX,
+        panY: current.panY + event.clientY - current.clientY,
+      }));
+      return;
+    }
+    if (current.kind === "move" && onObjectMove) {
+      onObjectMove(
+        current.objectId,
+        current.originX + (event.clientX - current.clientX) / viewport.zoom,
+        current.originY + (event.clientY - current.clientY) / viewport.zoom,
+      );
+      return;
+    }
+    if (current.kind === "erase") {
+      eraseAt(canvasPoint(event.clientX, event.clientY));
+      return;
+    }
+    if (current.kind === "draw") {
+      const nativeEvent = event.nativeEvent;
+      const samples = nativeEvent.getCoalescedEvents?.() ?? [nativeEvent];
+      for (const sample of samples) {
+        const point = canvasPoint(sample.clientX, sample.clientY);
+        const previous = current.points.at(-1);
+        if (
+          previous &&
+          Math.hypot(point.x - previous.x, point.y - previous.y) < 0.6
+        ) {
+          continue;
+        }
+        current.points.push({
+          ...point,
+          ...(sample.pressure ? { pressure: sample.pressure } : {}),
+          time: Date.now(),
+        });
+      }
+      setDraftStroke({ points: [...current.points], style: current.style });
+    }
+  }
+
+  function pointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const current = gesture.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    if (current.kind === "draw" && current.points.length > 1) {
+      onAddStroke?.(current.points, current.style);
+    }
+    gesture.current = null;
+    erasedDuringGesture.current.clear();
+    setDraftStroke(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function objectPointerDown(
+    event: ReactPointerEvent<HTMLDivElement>,
     object: BoardObject,
   ) {
+    if (effectiveTool !== "select") return;
     event.stopPropagation();
     onSelect?.(object.id);
     if (!onObjectMove || object.locked || event.button !== 0) return;
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = {
+    viewportRef.current?.setPointerCapture(event.pointerId);
+    gesture.current = {
+      kind: "move",
       objectId: object.id,
       pointerId: event.pointerId,
       clientX: event.clientX,
@@ -166,22 +632,8 @@ export function CanvasPreview({
     };
   }
 
-  function pointerMove(event: ReactPointerEvent<HTMLElement>) {
-    const current = drag.current;
-    if (!current || current.pointerId !== event.pointerId || !onObjectMove)
-      return;
-    onObjectMove(
-      current.objectId,
-      current.originX + event.clientX - current.clientX,
-      current.originY + event.clientY - current.clientY,
-    );
-  }
-
-  function pointerUp(event: ReactPointerEvent<HTMLElement>) {
-    if (drag.current?.pointerId === event.pointerId) drag.current = null;
-  }
-
   function renderObject(object: BoardObject) {
+    if (object.type === "stroke") return <Stroke object={object} />;
     if (object.type === "frame") {
       return (
         <section className="object-surface board-frame">
@@ -190,9 +642,19 @@ export function CanvasPreview({
       );
     }
     if (object.type === "text") {
+      const text = object as TextObject;
       return (
-        <div className="object-surface canvas-heading">
-          {(object as TextObject).text}
+        <div
+          className="object-surface canvas-heading"
+          style={{
+            color: text.style.color,
+            fontFamily: text.style.fontFamily,
+            fontSize: text.style.fontSize,
+            fontWeight: text.style.fontWeight,
+            textAlign: text.style.textAlign,
+          }}
+        >
+          {text.text}
         </div>
       );
     }
@@ -203,45 +665,178 @@ export function CanvasPreview({
     return null;
   }
 
+  const cursorClass = `canvas-tool-${effectiveTool}`;
+  const modeLabel =
+    effectiveTool === "select"
+      ? "Select and move objects"
+      : effectiveTool === "hand"
+        ? "Drag to pan the board"
+        : effectiveTool === "eraser"
+          ? "Drag across ink to erase"
+          : effectiveTool === "shape"
+            ? `Click to place a ${shape.replace("-", " ")}`
+            : effectiveTool === "sticky" || effectiveTool === "text"
+              ? "Click the board to place it"
+              : "Draw directly on the board";
+
   return (
     <div
-      className="canvas-stage hosted-canvas-stage"
-      aria-label="Editable hosted board"
-      onPointerDown={() => onSelect?.(null)}
+      ref={viewportRef}
+      className={`canvas-stage hosted-canvas-stage ${cursorClass}`}
+      aria-label="Canvas"
+      onContextMenu={(event) => event.preventDefault()}
+      onWheel={wheel}
+      onPointerDown={pointerDown}
+      onPointerMove={pointerMove}
+      onPointerUp={pointerUp}
+      onPointerCancel={pointerUp}
     >
-      {objects.map((object) => {
-        const rendered = renderObject(object);
-        if (!rendered || object.hidden) return null;
-        return (
-          <div
-            key={object.id}
-            className={`canvas-object hosted-object${selectedObjectId === object.id ? " selected" : ""}${onObjectMove && !object.locked ? " movable" : ""}`}
-            style={objectStyle(object)}
-            tabIndex={0}
-            role="button"
-            aria-label={`${object.type} object${object.locked ? ", locked" : ""}`}
-            onPointerDown={(event) => pointerDown(event, object)}
-            onPointerMove={pointerMove}
-            onPointerUp={pointerUp}
-            onPointerCancel={pointerUp}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelect?.(object.id);
-              }
-            }}
+      <div className="canvas-toolbar" role="toolbar" aria-label="Canvas tools">
+        {primaryTools.map((item, index) => (
+          <button
+            key={item.id}
+            className={tool === item.id ? "tool-button active" : "tool-button"}
+            disabled={index > 1 && !canEdit}
+            title={`${item.label} (${item.shortcut})`}
+            aria-label={`${item.label} (${item.shortcut})`}
+            aria-pressed={tool === item.id}
+            onClick={() => setTool(item.id)}
           >
-            {rendered}
+            <Icon name={item.icon} />
+          </button>
+        ))}
+        {(tool === "pen" || tool === "highlighter") && canEdit ? (
+          <div className="tool-options ink-options" aria-label="Ink colors">
+            {inkColors.map((color) => (
+              <button
+                key={color}
+                className={inkColor === color ? "selected" : ""}
+                style={{ backgroundColor: color }}
+                aria-label={`Use ink color ${color}`}
+                onClick={() => setInkColor(color)}
+              />
+            ))}
           </div>
-        );
-      })}
-      <div className="canvas-legend hosted-legend">
-        <span>
-          <i className="legend-selected" /> Selected object
-        </span>
-        <span>
-          <i className="legend-durable" /> Autosaved revision
-        </span>
+        ) : null}
+        {tool === "shape" && canEdit ? (
+          <div
+            className="tool-options shape-options"
+            aria-label="Shape choices"
+          >
+            {shapeChoices.map((choice) => (
+              <button
+                key={choice.id}
+                className={shape === choice.id ? "selected" : ""}
+                aria-pressed={shape === choice.id}
+                onClick={() => setShape(choice.id)}
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        className="canvas-world"
+        style={{
+          width: WORLD_WIDTH,
+          height: WORLD_HEIGHT,
+          transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
+          backgroundColor: board.settings.background.color,
+          backgroundImage:
+            board.settings.background.kind === "grid"
+              ? "linear-gradient(#e8edf2 1px, transparent 1px), linear-gradient(90deg, #e8edf2 1px, transparent 1px)"
+              : board.settings.background.kind === "dots"
+                ? "radial-gradient(circle, #d8dee6 1.2px, transparent 1.3px)"
+                : "none",
+          backgroundSize: `${board.settings.snap.gridSize}px ${board.settings.snap.gridSize}px`,
+        }}
+      >
+        {visibleObjects.length === 0 ? (
+          <div className="canvas-empty-prompt">
+            <strong>Start anywhere.</strong>
+            <span>Choose Pen, Sticky note, Text or Shapes above.</span>
+          </div>
+        ) : null}
+        {objects.map((object) => {
+          const rendered = renderObject(object);
+          if (!rendered || object.hidden) return null;
+          return (
+            <div
+              key={object.id}
+              className={`canvas-object hosted-object${selectedObjectId === object.id ? " selected" : ""}${effectiveTool === "select" && onObjectMove && !object.locked ? " movable" : ""}`}
+              style={objectStyle(object)}
+              tabIndex={effectiveTool === "select" ? 0 : -1}
+              role="button"
+              aria-label={`${object.type} object${object.locked ? ", locked" : ""}`}
+              onPointerDown={(event) => objectPointerDown(event, object)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect?.(object.id);
+                }
+              }}
+            >
+              {rendered}
+            </div>
+          );
+        })}
+        {draftStroke ? (
+          <svg
+            className="draft-stroke-layer"
+            width={WORLD_WIDTH}
+            height={WORLD_HEIGHT}
+            viewBox={`0 0 ${WORLD_WIDTH} ${WORLD_HEIGHT}`}
+            aria-hidden="true"
+          >
+            <polyline
+              points={draftStroke.points
+                .map((point) => `${point.x},${point.y}`)
+                .join(" ")}
+              fill="none"
+              stroke={draftStroke.style.color}
+              strokeWidth={draftStroke.style.width}
+              strokeOpacity={draftStroke.style.opacity}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : null}
+      </div>
+
+      <div className="canvas-mode-hint" role="status">
+        <Icon
+          name={
+            primaryTools.find((candidate) => candidate.id === effectiveTool)
+              ?.icon ?? "cursor"
+          }
+          size={14}
+        />
+        {modeLabel}
+      </div>
+
+      <div className="zoom-control" aria-label="Canvas zoom controls">
+        <button onClick={() => zoomFromCenter(0.85)} aria-label="Zoom out">
+          −
+        </button>
+        <button
+          className="zoom-value"
+          onClick={() => setViewport({ zoom: 1, panX: 0, panY: 0 })}
+          aria-label="Reset zoom and position"
+        >
+          {Math.round(viewport.zoom * 100)}%
+        </button>
+        <button onClick={() => zoomFromCenter(1.15)} aria-label="Zoom in">
+          +
+        </button>
+        <button
+          onClick={fitContent}
+          aria-label="Fit board content"
+          title="Fit content"
+        >
+          <Icon name="fit" size={15} />
+        </button>
       </div>
     </div>
   );

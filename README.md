@@ -4,7 +4,7 @@
 **Positioning:** Collaborate · Decide · Deliver  
 **Current prototype:** v8, static single-file browser application
 
-**Hosted workstream:** M3.1 production foundation in `apps/` and `packages/`
+**Hosted workstream:** M3.5 core canvas experience in `apps/` and `packages/`
 
 HuddleCanvas is a collaborative visual workspace being developed by GETITECH. The prototype evolved from a simple Microsoft Whiteboard-style canvas into a broader facilitation and execution product with multi-board management, templates, ink, images, PDF/PNG export, grouping, voting, checklists, frames/presentation concepts, AI-assisted quiz creation prototypes, and facilitation workflows.
 
@@ -37,18 +37,18 @@ AGENTS.md                          Instructions for Codex/AI coding agents
 .nojekyll                          Prevents Jekyll processing on Pages
 ```
 
-## Run the Hosted Alpha foundation
+## Run the Hosted Alpha
 
-The first M3 checkpoint is now scaffolded without replacing the v8 prototype:
+The hosted workstream remains separate from the preserved v8 prototype:
 
 ```bash
 corepack enable
 pnpm install
-pnpm test:foundation
-pnpm --filter @huddlecanvas/web dev
+pnpm test
+pnpm dev
 ```
 
-Open `http://localhost:5173`. The hosted shell is a deliberately read-only proof that the canonical schema can drive a professional interface. Authentication, durable storage, realtime transport, and production editing are not yet represented as working features.
+Open `http://localhost:5173`. The current slice supports signed sessions, durable board storage and recovery, plus select, pan, ink, erasing, sticky-note, text, shape, and zoom interactions. Realtime collaboration and the remaining v8 workflow parity are still pending.
 
 See `docs/HOSTED_ALPHA_DEVELOPMENT.md` and the architecture decisions in `docs/adr/`.
 
@@ -70,4 +70,4 @@ The production workstream is moving toward a **Hosted Alpha** with:
 - version history/recovery
 - analytics, billing entitlements, and production QA
 
-The current checkpoint establishes the schema, importer, command, geometry, authorization, and application-shell boundaries. The next vertical slice is authenticated workspace metadata plus durable single-user save/reopen and recovery. See `docs/WORK_PROJECT_CONTEXT.md`, `docs/PRODUCT_PROJECT_TRACKER.md`, and `docs/HOSTED_ALPHA_DEVELOPMENT.md` before significant changes.
+The current checkpoint establishes a usable durable single-user canvas. The next slices restore selection depth, object menus, undo/redo, board lifecycle polish, and then realtime collaboration. See `docs/WORK_PROJECT_CONTEXT.md`, `docs/PRODUCT_PROJECT_TRACKER.md`, and `docs/HOSTED_ALPHA_DEVELOPMENT.md` before significant changes.
