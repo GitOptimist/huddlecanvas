@@ -67,6 +67,23 @@ function errorMessage(error: unknown): string {
     : "The request could not be completed.";
 }
 
+function ProductBrand({ inverse = false }: { inverse?: boolean }) {
+  return (
+    <div className={`product-brand${inverse ? " product-brand-inverse" : ""}`}>
+      <img
+        src={
+          inverse
+            ? "/getitech-logo-dark.png"
+            : "/getitech-logo-light.png"
+        }
+        alt="GETITECH"
+      />
+      <span className="product-brand-divider" aria-hidden="true" />
+      <span className="product-brand-name">HuddleCanvas</span>
+    </div>
+  );
+}
+
 function loginError(): string {
   const params = new URLSearchParams(window.location.search);
   if (params.get("auth_error") !== "login_failed") return "";
@@ -116,35 +133,29 @@ function SignInScreen({
   return (
     <main className="sign-in-shell">
       <section className="sign-in-story" aria-label="HuddleCanvas introduction">
-        <div className="brand brand-on-dark">
-          <span className="brand-mark" aria-hidden="true">
-            <span />
-          </span>
-          <span>HuddleCanvas</span>
-        </div>
+        <ProductBrand inverse />
         <div className="story-copy">
-          <span className="story-kicker">Hosted Alpha · M3.4</span>
-          <h1>Your workshop should still be useful tomorrow.</h1>
+          <span className="story-kicker">Early access</span>
+          <h1>Turn workshop ideas into action.</h1>
           <p>
-            Open a durable workspace, make a decision visible, and return to the
-            same board from a fresh session—with recovery built in.
+            Capture ideas, agree on priorities, assign next steps, and return to
+            the same board whenever your team needs it.
           </p>
           <div className="story-proof">
             <span>
-              <Icon name="cloud" /> Durable board repository
+              <Icon name="cloud" /> Boards save automatically
             </span>
             <span>
-              <Icon name="history" /> Automatic version recovery
+              <Icon name="history" /> Recover earlier versions
             </span>
             <span>
-              <Icon name="shield" /> Server-enforced workspace roles
+              <Icon name="shield" /> Private team workspace
             </span>
           </div>
         </div>
         <p className="story-boundary">
-          Secure hosted sign-in and PostgreSQL persistence are enabled for the
-          staging durability gate. Realtime presence follows after recovery is
-          proven across browsers.
+          Private preview · HuddleCanvas is being tested with a small group of
+          teams.
         </p>
       </section>
 
@@ -192,11 +203,11 @@ function SignInScreen({
           </form>
         ) : (
           <div className="sign-in-card">
-            <span className="alpha-badge">Invited alpha</span>
-            <h2>Sign in to HuddleCanvas</h2>
+            <span className="alpha-badge">Early access</span>
+            <h2>Welcome to HuddleCanvas</h2>
             <p>
-              Use your invited account to open the same workspace and boards on
-              any supported browser.
+              Sign in to open your workspace and continue where your team left
+              off.
             </p>
             {error ? (
               <div className="form-error" role="alert">
@@ -209,14 +220,16 @@ function SignInScreen({
                 type="button"
                 onClick={beginHostedSignIn}
               >
-                Continue securely <Icon name="arrow" />
+                Sign in <Icon name="arrow" />
               </button>
             ) : (
               <div className="form-error" role="alert">
                 Staging sign-in has not been configured yet.
               </div>
             )}
-            <small>Your password is handled by the identity provider.</small>
+            <small>
+              Secure sign-in. HuddleCanvas never sees or stores your password.
+            </small>
           </div>
         )}
       </section>
@@ -559,7 +572,7 @@ export default function App() {
     return (
       <main className="loading-shell" aria-live="polite">
         <span className="loading-mark" />
-        <strong>Opening your durable workspace…</strong>
+        <strong>Opening your workspace…</strong>
       </main>
     );
   }
@@ -575,12 +588,7 @@ export default function App() {
   return (
     <div className="app-shell hosted-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <span />
-          </span>
-          <span>HuddleCanvas</span>
-        </div>
+        <ProductBrand />
         <button className="workspace-switcher" type="button">
           <span className="workspace-avatar">
             {workspaceAccess.workspace.name[0]?.toUpperCase()}
