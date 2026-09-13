@@ -19,6 +19,7 @@ import type {
   StrokeStyle,
   TextObject,
 } from "@huddlecanvas/board-schema";
+import { normalizeRect, selectWithLasso } from "@huddlecanvas/canvas-core";
 
 import { Icon, type IconName } from "./Icon.tsx";
 
@@ -40,14 +41,14 @@ export type CanvasTool =
 interface CanvasPreviewProps {
   board: BoardDocument;
   canEdit?: boolean;
-  selectedObjectId?: string | null;
-  onSelect?: (objectId: string | null) => void;
-  onObjectMove?: (objectId: string, x: number, y: number) => void;
+  selectedObjectIds?: string[];
+  onSelectionChange?: (objectIds: string[]) => void;
+  onObjectsMove?: (objectIds: string[], dx: number, dy: number) => void;
   onAddSticky?: (point: CanvasPoint) => void;
   onAddText?: (point: CanvasPoint) => void;
   onAddShape?: (point: CanvasPoint, shape: ShapeKind) => void;
   onAddStroke?: (points: StrokePoint[], style: StrokeStyle) => void;
-  onEraseStroke?: (objectId: string) => void;
+  onEraseStrokes?: (objectIds: string[]) => void;
 }
 
 interface ViewportState {
@@ -59,12 +60,19 @@ interface ViewportState {
 type Gesture =
   | {
       kind: "move";
-      objectId: string;
+      objectIds: string[];
       pointerId: number;
       clientX: number;
       clientY: number;
-      originX: number;
-      originY: number;
+      dx: number;
+      dy: number;
+    }
+  | {
+      kind: "lasso";
+      pointerId: number;
+      start: CanvasPoint;
+      end: CanvasPoint;
+      additive: boolean;
     }
   | {
       kind: "pan";
@@ -321,14 +329,14 @@ function strokeAtPoint(
 export function CanvasPreview({
   board,
   canEdit = false,
-  selectedObjectId = null,
-  onSelect,
-  onObjectMove,
+  selectedObjectIds = [],
+  onSelectionChange,
+  onObjectsMove,
   onAddSticky,
   onAddText,
   onAddShape,
   onAddStroke,
-  onEraseStroke,
+  onEraseStrokes,
 }: CanvasPreviewProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const gesture = useRef<Gesture | null>(null);
@@ -337,6 +345,16 @@ export function CanvasPreview({
   const [shape, setShape] = useState<ShapeKind>("rectangle");
   const [inkColor, setInkColor] = useState("#172033");
   const [spacePanning, setSpacePanning] = useState(false);
+  const [dragPreview, setDragPreview] = useState<{
+    ids: string[];
+    dx: number;
+    dy: number;
+  } | null>(null);
+  const [lassoPreview, setLassoPreview] = useState<{
+    start: CanvasPoint;
+    end: CanvasPoint;
+  } | null>(null);
+  const [erasedPreview, setErasedPreview] = useState<string[]>([]);
   const [draftStroke, setDraftStroke] = useState<{
     points: StrokePoint[];
     style: StrokeStyle;
@@ -371,7 +389,11 @@ export function CanvasPreview({
         t: "text",
         r: "shape",
       };
-      if (event.key === "Escape") setTool("select");
+      if (event.key === "Escape") {
+        setTool("select");
+        onSelectionChange?.([]);
+      }
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const next = shortcut[event.key.toLowerCase()];
       if (next && (canEdit || next === "select" || next === "hand")) {
         event.preventDefault();
@@ -387,7 +409,7 @@ export function CanvasPreview({
       window.removeEventListener("keydown", keyDown);
       window.removeEventListener("keyup", keyUp);
     };
-  }, [canEdit]);
+  }, [canEdit, onSelectionChange]);
 
   function canvasPoint(clientX: number, clientY: number): CanvasPoint {
     const bounds = viewportRef.current?.getBoundingClientRect();
@@ -462,7 +484,12 @@ export function CanvasPreview({
   }
 
   function wheel(event: ReactWheelEvent<HTMLDivElement>) {
-    if ((event.target as HTMLElement).closest(".canvas-toolbar")) return;
+    if (
+      (event.target as HTMLElement).closest(
+        ".canvas-toolbar, .ink-palette, .zoom-control, .selection-actions",
+      )
+    )
+      return;
     event.preventDefault();
     zoomAt(
       event.clientX,
@@ -472,17 +499,17 @@ export function CanvasPreview({
   }
 
   function eraseAt(point: CanvasPoint) {
-    if (!onEraseStroke) return;
+    if (!onEraseStrokes) return;
     const target = strokeAtPoint(objects, point, 9 / viewport.zoom);
     if (!target || erasedDuringGesture.current.has(target.id)) return;
     erasedDuringGesture.current.add(target.id);
-    onEraseStroke(target.id);
+    setErasedPreview([...erasedDuringGesture.current]);
   }
 
   function pointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (
       (event.target as HTMLElement).closest(
-        ".canvas-toolbar, .zoom-control, .canvas-mode-hint",
+        ".canvas-toolbar, .ink-palette, .zoom-control, .canvas-mode-hint, .selection-actions",
       )
     ) {
       return;
@@ -548,7 +575,16 @@ export function CanvasPreview({
       onAddShape?.(point, shape);
       setTool("select");
     } else {
-      onSelect?.(null);
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      gesture.current = {
+        kind: "lasso",
+        pointerId: event.pointerId,
+        start: point,
+        end: point,
+        additive: event.shiftKey,
+      };
+      setLassoPreview({ start: point, end: point });
     }
   }
 
@@ -563,12 +599,19 @@ export function CanvasPreview({
       }));
       return;
     }
-    if (current.kind === "move" && onObjectMove) {
-      onObjectMove(
-        current.objectId,
-        current.originX + (event.clientX - current.clientX) / viewport.zoom,
-        current.originY + (event.clientY - current.clientY) / viewport.zoom,
-      );
+    if (current.kind === "move") {
+      current.dx = (event.clientX - current.clientX) / viewport.zoom;
+      current.dy = (event.clientY - current.clientY) / viewport.zoom;
+      setDragPreview({
+        ids: current.objectIds,
+        dx: current.dx,
+        dy: current.dy,
+      });
+      return;
+    }
+    if (current.kind === "lasso") {
+      current.end = canvasPoint(event.clientX, event.clientY);
+      setLassoPreview({ start: current.start, end: current.end });
       return;
     }
     if (current.kind === "erase") {
@@ -603,9 +646,42 @@ export function CanvasPreview({
     if (current.kind === "draw" && current.points.length > 1) {
       onAddStroke?.(current.points, current.style);
     }
+    if (current.kind === "erase" && erasedDuringGesture.current.size) {
+      onEraseStrokes?.([...erasedDuringGesture.current]);
+    }
+    if (current.kind === "move") {
+      onObjectsMove?.(current.objectIds, current.dx, current.dy);
+      setDragPreview(null);
+    }
+    if (current.kind === "lasso") {
+      const end = canvasPoint(event.clientX, event.clientY);
+      const rect = normalizeRect(current.start, end);
+      const hits =
+        rect.width < 3 / viewport.zoom && rect.height < 3 / viewport.zoom
+          ? []
+          : selectWithLasso(board, rect);
+      onSelectionChange?.(
+        current.additive ? [...new Set([...selectedObjectIds, ...hits])] : hits,
+      );
+      setLassoPreview(null);
+    }
     gesture.current = null;
     erasedDuringGesture.current.clear();
+    setErasedPreview([]);
     setDraftStroke(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function pointerCancel(event: ReactPointerEvent<HTMLDivElement>) {
+    if (gesture.current?.pointerId !== event.pointerId) return;
+    gesture.current = null;
+    erasedDuringGesture.current.clear();
+    setErasedPreview([]);
+    setDraftStroke(null);
+    setDragPreview(null);
+    setLassoPreview(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -617,18 +693,29 @@ export function CanvasPreview({
   ) {
     if (effectiveTool !== "select") return;
     event.stopPropagation();
-    onSelect?.(object.id);
-    if (!onObjectMove || object.locked || event.button !== 0) return;
+    if (event.shiftKey) {
+      onSelectionChange?.(
+        selectedObjectIds.includes(object.id)
+          ? selectedObjectIds.filter((id) => id !== object.id)
+          : [...selectedObjectIds, object.id],
+      );
+      return;
+    }
+    const ids = selectedObjectIds.includes(object.id)
+      ? selectedObjectIds
+      : [object.id];
+    onSelectionChange?.(ids);
+    if (!onObjectsMove || object.locked || event.button !== 0) return;
     event.preventDefault();
     viewportRef.current?.setPointerCapture(event.pointerId);
     gesture.current = {
       kind: "move",
-      objectId: object.id,
+      objectIds: ids.filter((id) => !board.objects[id]?.locked),
       pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
-      originX: object.transform.x,
-      originY: object.transform.y,
+      dx: 0,
+      dy: 0,
     };
   }
 
@@ -689,7 +776,7 @@ export function CanvasPreview({
       onPointerDown={pointerDown}
       onPointerMove={pointerMove}
       onPointerUp={pointerUp}
-      onPointerCancel={pointerUp}
+      onPointerCancel={pointerCancel}
     >
       <div className="canvas-toolbar" role="toolbar" aria-label="Canvas tools">
         {primaryTools.map((item, index) => (
@@ -705,19 +792,6 @@ export function CanvasPreview({
             <Icon name={item.icon} />
           </button>
         ))}
-        {(tool === "pen" || tool === "highlighter") && canEdit ? (
-          <div className="tool-options ink-options" aria-label="Ink colors">
-            {inkColors.map((color) => (
-              <button
-                key={color}
-                className={inkColor === color ? "selected" : ""}
-                style={{ backgroundColor: color }}
-                aria-label={`Use ink color ${color}`}
-                onClick={() => setInkColor(color)}
-              />
-            ))}
-          </div>
-        ) : null}
         {tool === "shape" && canEdit ? (
           <div
             className="tool-options shape-options"
@@ -736,6 +810,23 @@ export function CanvasPreview({
           </div>
         ) : null}
       </div>
+
+      {(tool === "pen" || tool === "highlighter") && canEdit ? (
+        <div className="ink-palette" role="group" aria-label="Ink colors">
+          <span>{tool === "pen" ? "Pen" : "Highlighter"}</span>
+          {inkColors.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={inkColor === color ? "selected" : ""}
+              style={{ backgroundColor: color }}
+              aria-label={`Use ink color ${color}`}
+              aria-pressed={inkColor === color}
+              onClick={() => setInkColor(color)}
+            />
+          ))}
+        </div>
+      ) : null}
 
       <div
         className="canvas-world"
@@ -756,17 +847,26 @@ export function CanvasPreview({
         {visibleObjects.length === 0 ? (
           <div className="canvas-empty-prompt">
             <strong>Start anywhere.</strong>
-            <span>Choose Pen, Sticky note, Text or Shapes above.</span>
+            <span>Choose a tool on the left to add to this board.</span>
           </div>
         ) : null}
         {objects.map((object) => {
           const rendered = renderObject(object);
-          if (!rendered || object.hidden) return null;
+          if (!rendered || object.hidden || erasedPreview.includes(object.id))
+            return null;
           return (
             <div
               key={object.id}
-              className={`canvas-object hosted-object${selectedObjectId === object.id ? " selected" : ""}${effectiveTool === "select" && onObjectMove && !object.locked ? " movable" : ""}`}
-              style={objectStyle(object)}
+              className={`canvas-object hosted-object${selectedObjectIds.includes(object.id) ? " selected" : ""}${effectiveTool === "select" && onObjectsMove && !object.locked ? " movable" : ""}`}
+              style={{
+                ...objectStyle(object),
+                ...(dragPreview?.ids.includes(object.id)
+                  ? {
+                      left: object.transform.x + dragPreview.dx,
+                      top: object.transform.y + dragPreview.dy,
+                    }
+                  : {}),
+              }}
               tabIndex={effectiveTool === "select" ? 0 : -1}
               role="button"
               aria-label={`${object.type} object${object.locked ? ", locked" : ""}`}
@@ -774,7 +874,7 @@ export function CanvasPreview({
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  onSelect?.(object.id);
+                  onSelectionChange?.([object.id]);
                 }
               }}
             >
@@ -782,6 +882,13 @@ export function CanvasPreview({
             </div>
           );
         })}
+        {lassoPreview ? (
+          <div
+            className="canvas-lasso"
+            style={normalizeRect(lassoPreview.start, lassoPreview.end)}
+            aria-hidden="true"
+          />
+        ) : null}
         {draftStroke ? (
           <svg
             className="draft-stroke-layer"

@@ -52,4 +52,11 @@ The root `index.html` is a copy of the current v8 prototype.
 - Added wheel and button zoom, board panning, reset, fit-to-content, keyboard shortcuts, and a collapsible selection/history inspector.
 - Removed internal milestone and engineering-boundary language from the customer-facing canvas.
 
+### Hosted canvas parity pass (incremental, not v8 parity complete)
+
+- Moved the tool rail to the left of the board, moved ink colors to a bottom palette, and exposed usable Undo/Redo in the board header.
+- Added drag-to-select, Shift-click multi-selection, group movement as a single save, contextual Duplicate/Delete, keyboard shortcuts, and in-session undo/redo. Eraser strokes are committed once per pointer gesture.
+- Added a browser regression for selection, duplication, undo/redo, movement, deletion and save/reload. This regression still needs to be run in an environment with Playwright Chromium and on staging after deployment.
+- The hosted board still does **not** include all v8 tools, menus or workflows. v8 localStorage boards are not the same repository as authenticated hosted boards; importing them requires an explicit migration flow. Resize/rotate/group, export, search, templates, facilitation, and realtime remain separate backlog items.
+
 Historical files are for traceability and regression/reference. New feature work should target the root app or the future Hosted Alpha branch, not the archive.

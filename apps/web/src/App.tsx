@@ -11,6 +11,7 @@ import type {
   StrokeStyle,
   TextObject,
 } from "@huddlecanvas/board-schema";
+import { applyBoardCommand } from "@huddlecanvas/canvas-core";
 
 import {
   ApiError,
@@ -272,7 +273,7 @@ export default function App() {
   const [activeBoard, setActiveBoard] = useState<BoardRecord | null>(null);
   const [role, setRole] = useState<Role>("viewer");
   const [versions, setVersions] = useState<BoardVersion[]>([]);
-  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -281,18 +282,58 @@ export default function App() {
   const [saveRetry, setSaveRetry] = useState(0);
   const changeSequence = useRef(0);
   const saving = useRef(false);
+  const dirtyRef = useRef(false);
   const pendingReason = useRef("Autosave");
+  const boardRef = useRef<BoardRecord | null>(null);
+  const editHistory = useRef<{
+    boardId: string | null;
+    undo: BoardDocument[];
+    redo: BoardDocument[];
+    lastReason: string | null;
+    lastAt: number;
+  }>({ boardId: null, undo: [], redo: [], lastReason: null, lastAt: 0 });
+  const [, setHistoryChange] = useState(0);
 
   const canEdit = role === "owner" || role === "editor";
   const canRestore = role === "owner";
+  const selectedObjectId =
+    selectedObjectIds.length === 1 ? selectedObjectIds[0] : null;
   const selectedObject =
     activeBoard && selectedObjectId
       ? (activeBoard.document.objects[selectedObjectId] ?? null)
       : null;
+  const canDuplicateSelection = selectedObjectIds.some((id) => {
+    const object = activeBoard?.document.objects[id];
+    return (
+      object?.parentId === null &&
+      object.type !== "connector" &&
+      object.type !== "group"
+    );
+  });
+  const canDeleteSelection = selectedObjectIds.some((id) => {
+    const object = activeBoard?.document.objects[id];
+    return object && !object.locked;
+  });
 
   useEffect(() => {
     if (selectedObjectId) setInspectorOpen(true);
   }, [selectedObjectId]);
+
+  function showBoard(board: BoardRecord | null) {
+    boardRef.current = board;
+    setActiveBoard(board);
+  }
+
+  function resetEditHistory(boardId: string | null) {
+    editHistory.current = {
+      boardId,
+      undo: [],
+      redo: [],
+      lastReason: null,
+      lastAt: 0,
+    };
+    setHistoryChange((count) => count + 1);
+  }
 
   const refreshBoardList = useCallback(
     async (access: WorkspaceAccess, sessionToken?: string) => {
@@ -306,16 +347,36 @@ export default function App() {
 
   const openBoard = useCallback(
     async (boardId: string, sessionToken = token || undefined) => {
+      if (
+        boardRef.current &&
+        boardRef.current.id !== boardId &&
+        (dirtyRef.current || saving.current)
+      ) {
+        setError(
+          "Wait for this board to finish saving before switching boards.",
+        );
+        return;
+      }
       setError("");
       const [boardResult, versionResult] = await Promise.all([
         getBoard(sessionToken, boardId),
         listVersions(sessionToken, boardId),
       ]);
+      boardRef.current = boardResult.board;
       setActiveBoard(boardResult.board);
       setRole(boardResult.role);
       setVersions(versionResult.versions);
-      setSelectedObjectId(null);
+      setSelectedObjectIds([]);
+      editHistory.current = {
+        boardId,
+        undo: [],
+        redo: [],
+        lastReason: null,
+        lastAt: 0,
+      };
+      setHistoryChange((count) => count + 1);
       setDirty(false);
+      dirtyRef.current = false;
       setSaveState("saved");
     },
     [token],
@@ -363,17 +424,57 @@ export default function App() {
     update: (document: BoardDocument) => void,
     reason: string,
   ) {
-    if (!canEdit) return;
+    const current = boardRef.current;
+    if (!canEdit || !current) return;
+    const document = structuredClone(current.document);
+    update(document);
+    document.generation = current.document.generation + 1;
+    if (editHistory.current.boardId !== current.id) {
+      resetEditHistory(current.id);
+    }
+    const now = Date.now();
+    const combineTyping =
+      ["Renamed board", "Edited sticky note", "Edited text"].includes(reason) &&
+      editHistory.current.lastReason === reason &&
+      now - editHistory.current.lastAt < 1000;
+    if (!combineTyping) {
+      editHistory.current.undo.push(current.document);
+      if (editHistory.current.undo.length > 50)
+        editHistory.current.undo.shift();
+    }
+    editHistory.current.lastReason = reason;
+    editHistory.current.lastAt = now;
+    editHistory.current.redo = [];
+    setHistoryChange((count) => count + 1);
     changeSequence.current += 1;
     pendingReason.current = reason;
-    setActiveBoard((current) => {
-      if (!current) return current;
-      const document = structuredClone(current.document);
-      update(document);
-      document.generation = current.document.generation + 1;
-      return { ...current, title: document.title, document };
-    });
+    showBoard({ ...current, title: document.title, document });
     setDirty(true);
+    dirtyRef.current = true;
+    setSaveState("unsaved");
+  }
+
+  function travelHistory(direction: "undo" | "redo") {
+    const current = boardRef.current;
+    if (!current || !canEdit || editHistory.current.boardId !== current.id)
+      return;
+    const source = editHistory.current[direction];
+    const previous = source.pop();
+    if (!previous) return;
+    const destination = direction === "undo" ? "redo" : "undo";
+    editHistory.current[destination].push(current.document);
+    editHistory.current.lastReason = null;
+    setHistoryChange((count) => count + 1);
+    const document = {
+      ...previous,
+      generation: current.document.generation + 1,
+    };
+    changeSequence.current += 1;
+    pendingReason.current =
+      direction === "undo" ? "Undid change" : "Redid change";
+    showBoard({ ...current, title: document.title, document });
+    setDirty(true);
+    dirtyRef.current = true;
     setSaveState("unsaved");
   }
 
@@ -395,18 +496,21 @@ export default function App() {
       )
         .then(async (result) => {
           const changedWhileSaving = changeSequence.current !== sequence;
-          setActiveBoard((current) => {
-            if (!current || current.id !== result.board.id) return current;
-            return changedWhileSaving
-              ? {
-                  ...result.board,
-                  document: current.document,
-                  title: current.document.title,
-                }
-              : result.board;
-          });
+          const current = boardRef.current;
+          if (current?.id === result.board.id) {
+            showBoard(
+              changedWhileSaving
+                ? {
+                    ...result.board,
+                    document: current.document,
+                    title: current.document.title,
+                  }
+                : result.board,
+            );
+          }
           if (!changedWhileSaving) {
             setDirty(false);
+            dirtyRef.current = false;
             setSaveState("saved");
           } else {
             setSaveState("unsaved");
@@ -454,6 +558,10 @@ export default function App() {
 
   async function addBoard() {
     if (!workspaceAccess || !canEdit) return;
+    if (dirtyRef.current || saving.current) {
+      setError("Wait for this board to finish saving before creating a board.");
+      return;
+    }
     setError("");
     try {
       const result = await createBoard(
@@ -501,7 +609,7 @@ export default function App() {
       document.objects[objectId] = sticky;
       document.rootOrder.push(objectId);
     }, "Added sticky note");
-    setSelectedObjectId(objectId);
+    setSelectedObjectIds([objectId]);
   }
 
   function addText(point: CanvasPoint) {
@@ -541,7 +649,7 @@ export default function App() {
       document.objects[objectId] = object;
       document.rootOrder.push(objectId);
     }, "Added text");
-    setSelectedObjectId(objectId);
+    setSelectedObjectIds([objectId]);
   }
 
   function addShape(point: CanvasPoint, shape: ShapeKind) {
@@ -583,7 +691,7 @@ export default function App() {
       },
       `Added ${shape.replace("-", " ")}`,
     );
-    setSelectedObjectId(objectId);
+    setSelectedObjectIds([objectId]);
   }
 
   function addStroke(points: StrokePoint[], style: StrokeStyle) {
@@ -632,26 +740,116 @@ export default function App() {
     );
   }
 
-  function eraseStroke(objectId: string) {
+  function eraseStrokes(objectIds: string[]) {
+    const ids = objectIds.filter((id) => {
+      const object = boardRef.current?.document.objects[id];
+      return object?.type === "stroke" && !object.locked;
+    });
+    if (!ids.length || !identity) return;
     updateDocument((document) => {
-      const object = document.objects[objectId];
-      if (!object || object.type !== "stroke" || object.locked) return;
-      delete document.objects[objectId];
-      document.rootOrder = document.rootOrder.filter((id) => id !== objectId);
+      Object.assign(
+        document,
+        applyBoardCommand(
+          document,
+          {
+            type: "object.remove",
+            objectIds: ids,
+          },
+          { actorId: identity.userId, now: new Date().toISOString() },
+        ),
+      );
     }, "Erased ink");
-    if (selectedObjectId === objectId) setSelectedObjectId(null);
+    if (selectedObjectIds.some((id) => ids.includes(id)))
+      setSelectedObjectIds([]);
   }
 
-  function moveObject(objectId: string, x: number, y: number) {
+  function moveObjects(objectIds: string[], dx: number, dy: number) {
     if (!identity) return;
-    updateDocument((document) => {
-      const object = document.objects[objectId];
-      if (!object || object.locked) return;
-      object.transform.x = Math.round(x);
-      object.transform.y = Math.round(y);
-      object.updatedAt = new Date().toISOString();
-      object.updatedBy = identity.userId;
-    }, "Moved object");
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+    updateDocument(
+      (document) => {
+        Object.assign(
+          document,
+          applyBoardCommand(
+            document,
+            {
+              type: "object.move",
+              objectIds,
+              deltaX: Math.round(dx),
+              deltaY: Math.round(dy),
+            },
+            { actorId: identity.userId, now: new Date().toISOString() },
+          ),
+        );
+      },
+      objectIds.length > 1 ? "Moved objects" : "Moved object",
+    );
+  }
+
+  function deleteSelection() {
+    if (!selectedObjectIds.length) return;
+    const deletable = selectedObjectIds.filter((id) => {
+      const object = boardRef.current?.document.objects[id];
+      return object && !object.locked;
+    });
+    if (!deletable.length || !identity) return;
+    updateDocument(
+      (document) => {
+        Object.assign(
+          document,
+          applyBoardCommand(
+            document,
+            {
+              type: "object.remove",
+              objectIds: deletable,
+            },
+            { actorId: identity.userId, now: new Date().toISOString() },
+          ),
+        );
+      },
+      deletable.length > 1 ? "Deleted objects" : "Deleted object",
+    );
+    setSelectedObjectIds([]);
+  }
+
+  function duplicateSelection() {
+    if (!identity) return;
+    const selected = selectedObjectIds
+      .map((id) => boardRef.current?.document.objects[id])
+      .filter((object): object is BoardObject =>
+        Boolean(
+          object &&
+          object.parentId === null &&
+          object.type !== "connector" &&
+          object.type !== "group",
+        ),
+      );
+    if (!selected.length) return;
+    const ids: string[] = [];
+    updateDocument(
+      (document) => {
+        const timestamp = new Date().toISOString();
+        for (const original of selected) {
+          const id = `${original.type}_${crypto.randomUUID()}`;
+          const object: BoardObject = structuredClone(original);
+          object.id = id;
+          object.orderKey = document.rootOrder.length
+            .toString()
+            .padStart(8, "0");
+          object.transform.x += 24;
+          object.transform.y += 24;
+          object.createdAt = timestamp;
+          object.updatedAt = timestamp;
+          object.createdBy = identity.userId;
+          object.updatedBy = identity.userId;
+          document.objects[id] = object;
+          document.rootOrder.push(id);
+          ids.push(id);
+        }
+      },
+      selected.length > 1 ? "Duplicated objects" : "Duplicated object",
+    );
+    setSelectedObjectIds(ids);
   }
 
   function updateSelectedSticky(
@@ -688,9 +886,11 @@ export default function App() {
         activeBoard.id,
         version.id,
       );
-      setActiveBoard(result.board);
-      setSelectedObjectId(null);
+      showBoard(result.board);
+      setSelectedObjectIds([]);
+      resetEditHistory(result.board.id);
       setDirty(false);
+      dirtyRef.current = false;
       setSaveState("saved");
       const versionResult = await listVersions(
         token || undefined,
@@ -731,8 +931,43 @@ export default function App() {
     setIdentity(null);
     setWorkspaceAccess(null);
     setBoards([]);
-    setActiveBoard(null);
+    showBoard(null);
+    dirtyRef.current = false;
+    resetEditHistory(null);
   }
+
+  useEffect(() => {
+    function keyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']"))
+        return;
+      if (!canEdit || !boardRef.current) return;
+      const modifier = event.ctrlKey || event.metaKey;
+      if (modifier && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        travelHistory(event.shiftKey ? "redo" : "undo");
+      } else if (modifier && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        travelHistory("redo");
+      } else if (
+        modifier &&
+        event.key.toLowerCase() === "d" &&
+        selectedObjectIds.length
+      ) {
+        event.preventDefault();
+        duplicateSelection();
+      } else if (
+        !modifier &&
+        (event.key === "Delete" || event.key === "Backspace") &&
+        selectedObjectIds.length
+      ) {
+        event.preventDefault();
+        deleteSelection();
+      }
+    }
+    window.addEventListener("keydown", keyDown);
+    return () => window.removeEventListener("keydown", keyDown);
+  });
 
   if (!loading && !identity) {
     return (
@@ -849,6 +1084,28 @@ export default function App() {
               }}
             />
           </div>
+          <div
+            className="edit-actions"
+            role="group"
+            aria-label="Board edit history"
+          >
+            <button
+              type="button"
+              disabled={!canEdit || !editHistory.current.undo.length}
+              onClick={() => travelHistory("undo")}
+              title="Undo (Ctrl/⌘ Z)"
+            >
+              ↶ Undo
+            </button>
+            <button
+              type="button"
+              disabled={!canEdit || !editHistory.current.redo.length}
+              onClick={() => travelHistory("redo")}
+              title="Redo (Ctrl/⌘ Shift Z)"
+            >
+              ↷ Redo
+            </button>
+          </div>
           <div className="topbar-actions">
             <span className={`save-state save-${saveState}`} role="status">
               <Icon
@@ -907,18 +1164,19 @@ export default function App() {
           <section className="canvas-panel" id="board">
             {activeBoard ? (
               <CanvasPreview
+                key={activeBoard.id}
                 board={activeBoard.document}
                 canEdit={canEdit}
-                selectedObjectId={selectedObjectId}
-                onSelect={setSelectedObjectId}
+                selectedObjectIds={selectedObjectIds}
+                onSelectionChange={setSelectedObjectIds}
                 {...(canEdit
                   ? {
-                      onObjectMove: moveObject,
+                      onObjectsMove: moveObjects,
                       onAddSticky: addSticky,
                       onAddText: addText,
                       onAddShape: addShape,
                       onAddStroke: addStroke,
-                      onEraseStroke: eraseStroke,
+                      onEraseStrokes: eraseStrokes,
                     }
                   : {})}
               />
@@ -928,6 +1186,38 @@ export default function App() {
                 <strong>Create your first board</strong>
               </div>
             )}
+            {selectedObjectIds.length > 0 && canEdit ? (
+              <div
+                className="selection-actions"
+                role="toolbar"
+                aria-label="Selection actions"
+              >
+                <span>{selectedObjectIds.length} selected</span>
+                <button
+                  type="button"
+                  disabled={!canDuplicateSelection}
+                  onClick={duplicateSelection}
+                  title="Duplicate (Ctrl/⌘ D)"
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  disabled={!canDeleteSelection}
+                  onClick={deleteSelection}
+                  title="Delete (Delete)"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedObjectIds([])}
+                  aria-label="Clear selection"
+                >
+                  ×
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <aside
@@ -953,7 +1243,12 @@ export default function App() {
               </button>
             </div>
 
-            {selectedObject?.type === "sticky" ? (
+            {selectedObjectIds.length > 1 ? (
+              <section className="selection-summary">
+                <strong>{selectedObjectIds.length} objects selected</strong>
+                <small>Drag them together or use Duplicate and Delete.</small>
+              </section>
+            ) : selectedObject?.type === "sticky" ? (
               <section className="object-editor">
                 <label>
                   Note

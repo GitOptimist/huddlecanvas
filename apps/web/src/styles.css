@@ -1616,6 +1616,12 @@ nav {
 }
 .hosted-shell .canvas-toolbar {
   align-items: center;
+  top: 16px;
+  left: 16px;
+  flex-direction: column;
+  transform: none;
+  max-height: calc(100% - 100px);
+  overflow: visible;
 }
 .hosted-shell .tool-button:not(:disabled) {
   cursor: pointer;
@@ -1650,6 +1656,102 @@ nav {
 .shape-options {
   width: 292px;
   flex-wrap: wrap;
+}
+.hosted-shell .shape-options {
+  top: 0;
+  left: calc(100% + 8px);
+  transform: none;
+}
+.ink-palette {
+  position: absolute;
+  z-index: 7;
+  left: 70px;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border: 1px solid #dce2e8;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 7px 22px rgba(31, 45, 61, 0.12);
+}
+.ink-palette span {
+  margin-right: 4px;
+  color: #5d687a;
+  font-size: 11px;
+  font-weight: 650;
+}
+.ink-palette button {
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #ced5df;
+  cursor: pointer;
+}
+.ink-palette button.selected {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px #6557c8;
+}
+.canvas-lasso {
+  position: absolute;
+  z-index: 25;
+  border: 1px dashed #6557c8;
+  background: rgba(101, 87, 200, 0.12);
+  pointer-events: none;
+}
+.edit-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: 18px;
+  margin-right: auto;
+}
+.edit-actions button,
+.selection-actions button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #4b5565;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 7px 9px;
+}
+.edit-actions button:hover:not(:disabled),
+.selection-actions button:hover {
+  color: #5145b6;
+  background: #f1effd;
+}
+.edit-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.selection-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.selection-actions {
+  position: absolute;
+  z-index: 8;
+  top: 16px;
+  left: 80px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid #dce2e8;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(31, 45, 61, 0.1);
+}
+.selection-actions span {
+  margin-right: 5px;
+  color: #697485;
+  font-size: 11px;
+  white-space: nowrap;
 }
 .shape-options button {
   flex: 1 0 82px;
@@ -1757,12 +1859,47 @@ nav {
   .hosted-shell .content-grid,
   .hosted-shell .content-grid.inspector-closed {
     grid-template-columns: minmax(0, 1fr);
+    position: relative;
+  }
+  .hosted-shell .inspector:not([hidden]) {
+    display: block;
+    position: absolute;
+    z-index: 10;
+    top: 18px;
+    right: 18px;
+    bottom: 18px;
+    width: min(330px, calc(100% - 90px));
+    overflow-y: auto;
+    box-shadow: 0 14px 36px rgba(31, 45, 61, 0.17);
   }
 }
 
 @media (max-width: 760px) {
   .canvas-toolbar {
     max-width: calc(100% - 28px);
+  }
+  .hosted-shell .canvas-toolbar {
+    top: 10px;
+    left: 10px;
+  }
+  .hosted-shell .shape-options {
+    width: 192px;
+  }
+  .ink-palette {
+    left: 10px;
+    bottom: 48px;
+  }
+  .selection-actions {
+    left: 62px;
+    top: 10px;
+  }
+  .hosted-shell .inspector:not([hidden]) {
+    top: 10px;
+    right: 10px;
+    bottom: 10px;
+  }
+  .edit-actions {
+    margin-left: 5px;
   }
   .canvas-mode-hint {
     display: none;

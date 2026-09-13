@@ -67,6 +67,9 @@ importers:
       '@huddlecanvas/board-schema':
         specifier: workspace:*
         version: link:../../packages/board-schema
+      '@huddlecanvas/canvas-core':
+        specifier: workspace:*
+        version: link:../../packages/canvas-core
       react:
         specifier: ^19.1.1
         version: 19.2.8
