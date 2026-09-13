@@ -60,3 +60,9 @@ The root `index.html` is a copy of the current v8 prototype.
 - The hosted board still does **not** include all v8 tools, menus or workflows. v8 localStorage boards are not the same repository as authenticated hosted boards; importing them requires an explicit migration flow. Resize/rotate/group, export, search, templates, facilitation, and realtime remain separate backlog items.
 
 Historical files are for traceability and regression/reference. New feature work should target the root app or the future Hosted Alpha branch, not the archive.
+
+## v8-to-hosted bridge (partial)
+
+- Added a separate Render static-preview Blueprint and a byte-identical v8 build from the unchanged root `index.html`. Preview browser storage is independent of GitHub Pages and Hosted Alpha.
+- Added a guarded, authenticated single-board `.flowboard` importer that creates a new canonical hosted board and initial revision only for supported simple board content. Unsupported or lossy files are rejected with field-level reasons and leave the hosted repository unchanged.
+- The hosted UI is still not the full v8 app. See `docs/V8_HOSTED_BRIDGE.md` for safe manual migration and remaining tool/media/feature work.

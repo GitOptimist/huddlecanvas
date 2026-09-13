@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type {
-  BoardDocument,
-  BoardObject,
-  ShapeKind,
-  ShapeObject,
-  StickyObject,
-  StrokeObject,
-  StrokePoint,
-  StrokeStyle,
-  TextObject,
+import {
+  assessLegacyV8,
+  type SafeV8Assessment,
+  type LegacyImportIssue,
+  type BoardDocument,
+  type BoardObject,
+  type ShapeKind,
+  type ShapeObject,
+  type StickyObject,
+  type StrokeObject,
+  type StrokePoint,
+  type StrokeStyle,
+  type TextObject,
 } from "@huddlecanvas/board-schema";
 import { applyBoardCommand } from "@huddlecanvas/canvas-core";
 
@@ -20,6 +23,7 @@ import {
   getAuthConfig,
   getBoard,
   getSession,
+  importV8Board,
   hostedLoginUrl,
   listBoards,
   listVersions,
@@ -280,6 +284,15 @@ export default function App() {
   const [error, setError] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saveRetry, setSaveRetry] = useState(0);
+  const [importPreview, setImportPreview] = useState<{
+    fileName: string;
+    payload: unknown;
+    assessment: SafeV8Assessment;
+    issues: LegacyImportIssue[];
+  } | null>(null);
+  const [importError, setImportError] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const importFile = useRef<HTMLInputElement | null>(null);
   const changeSequence = useRef(0);
   const saving = useRef(false);
   const dirtyRef = useRef(false);
@@ -570,9 +583,75 @@ export default function App() {
         "Untitled board",
       );
       await refreshBoardList(workspaceAccess, token || undefined);
+      if (dirtyRef.current || saving.current) {
+        setImportPreview(null);
+        setError(
+          "The new board was imported, but this board has unsaved changes. Open the imported board from Your boards after it finishes saving.",
+        );
+        return;
+      }
       await openBoard(result.board.id, token || undefined);
     } catch (caught) {
       setError(errorMessage(caught));
+    }
+  }
+
+  async function selectV8File(file: File | undefined) {
+    if (!file || !canEdit || !workspaceAccess || !identity) return;
+    setImportError("");
+    setImportPreview(null);
+    try {
+      if (file.size > 750_000)
+        throw new Error(
+          "This board is too large for the current import limit (750 KB). Your file is unchanged.",
+        );
+      const payload: unknown = JSON.parse(await file.text());
+      const assessment = assessLegacyV8(payload, { actorId: identity.userId });
+      setImportPreview({
+        fileName: file.name,
+        payload,
+        assessment,
+        issues: assessment.issues,
+      });
+    } catch (caught) {
+      setImportError(errorMessage(caught));
+    }
+  }
+
+  async function confirmV8Import() {
+    if (
+      !importPreview?.assessment.canImport ||
+      !workspaceAccess ||
+      !canEdit ||
+      importBusy
+    )
+      return;
+    if (dirtyRef.current || saving.current) {
+      setImportError(
+        "Wait for this board to finish saving before importing another board.",
+      );
+      return;
+    }
+    setImportBusy(true);
+    setImportError("");
+    try {
+      const result = await importV8Board(
+        token || undefined,
+        workspaceAccess.workspace.id,
+        importPreview.payload,
+      );
+      await refreshBoardList(workspaceAccess, token || undefined);
+      await openBoard(result.board.id, token || undefined);
+      setImportPreview(null);
+    } catch (caught) {
+      setImportError(errorMessage(caught));
+      if (caught instanceof ApiError && caught.issues) {
+        setImportPreview((previous) =>
+          previous ? { ...previous, issues: caught.issues! } : previous,
+        );
+      }
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -1048,6 +1127,24 @@ export default function App() {
             </button>
           ))}
         </div>
+        {canEdit ? (
+          <div className="v8-import-entry">
+            <input
+              ref={importFile}
+              type="file"
+              accept=".flowboard,.json,application/json"
+              aria-label="Select a v8 board export"
+              hidden
+              onChange={(event) => {
+                void selectV8File(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+            <button type="button" onClick={() => importFile.current?.click()}>
+              Import v8 board
+            </button>
+          </div>
+        ) : null}
         <div className="sidebar-footer">
           <span className="avatar">{initials(identity.displayName)}</span>
           <div>
@@ -1153,6 +1250,87 @@ export default function App() {
                 ×
               </button>
             )}
+          </div>
+        ) : null}
+
+        {importError && !importPreview ? (
+          <div className="workspace-alert" role="alert">
+            {importError}
+            <button type="button" onClick={() => setImportError("")}>
+              Dismiss
+            </button>
+          </div>
+        ) : null}
+
+        {importPreview ? (
+          <div
+            className="v8-import-overlay"
+            role="presentation"
+            onClick={() => !importBusy && setImportPreview(null)}
+          >
+            <section
+              className="v8-import-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="v8-import-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h2 id="v8-import-title">Import v8 board</h2>
+              <p>
+                Source: {importPreview.fileName}. This creates a new hosted
+                board; your v8 file and existing boards stay unchanged.
+              </p>
+              <p>
+                <strong>{importPreview.assessment.document.title}</strong> ·{" "}
+                {Object.keys(importPreview.assessment.document.objects).length}{" "}
+                objects
+              </p>
+              {importPreview.issues.length ? (
+                <div className="v8-import-issues" role="alert">
+                  <strong>
+                    Import blocked: these details would not carry over.
+                  </strong>
+                  <ul>
+                    {importPreview.issues.map((issue, index) => (
+                      <li key={`${issue.path}-${index}`}>
+                        <code>{issue.path}</code>: {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                  <p>
+                    Keep editing the v8 board for now. No hosted board was
+                    created.
+                  </p>
+                </div>
+              ) : (
+                <p className="v8-import-safe">
+                  No unsupported content detected. Review the hosted copy after
+                  import before relying on it.
+                </p>
+              )}
+              {importError ? (
+                <p role="alert" className="v8-import-error">
+                  {importError}
+                </p>
+              ) : null}
+              <div className="v8-import-actions">
+                <button
+                  type="button"
+                  disabled={importBusy}
+                  onClick={() => setImportPreview(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-action"
+                  disabled={importBusy || importPreview.issues.length > 0}
+                  onClick={() => void confirmV8Import()}
+                >
+                  {importBusy ? "Importing…" : "Import as new board"}
+                </button>
+              </div>
+            </section>
           </div>
         ) : null}
 

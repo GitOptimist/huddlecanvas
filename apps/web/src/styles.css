@@ -45,6 +45,87 @@ button {
   background: #fff;
   border-right: 1px solid #dfe5eb;
 }
+.v8-import-entry {
+  margin: 14px 4px;
+}
+.v8-import-entry button {
+  width: 100%;
+  border: 1px solid #d5dcec;
+  border-radius: 8px;
+  background: #fff;
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.v8-import-entry button:hover {
+  border-color: #6256d9;
+}
+.v8-import-overlay {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #18213b9c;
+}
+.v8-import-dialog {
+  width: min(100%, 560px);
+  max-height: min(85vh, 850px);
+  overflow: auto;
+  padding: 26px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 22px 80px #18213b40;
+}
+.v8-import-dialog h2 {
+  margin: 0 0 12px;
+}
+.v8-import-dialog p {
+  line-height: 1.5;
+}
+.v8-import-issues {
+  padding: 15px;
+  border: 1px solid #f1c5c0;
+  border-radius: 8px;
+  background: #fff6f5;
+}
+.v8-import-issues ul {
+  padding-left: 20px;
+  max-height: 220px;
+  overflow: auto;
+}
+.v8-import-issues li {
+  margin: 7px 0;
+}
+.v8-import-safe {
+  color: #155e5b;
+}
+.v8-import-error {
+  color: #a32420;
+}
+.v8-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+.v8-import-actions button {
+  border: 1px solid #d5dcec;
+  border-radius: 8px;
+  padding: 9px 13px;
+  cursor: pointer;
+}
+.v8-import-actions .primary-action {
+  width: auto;
+  margin: 0;
+}
+.v8-import-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
 .product-brand {
   display: flex;
   align-items: center;

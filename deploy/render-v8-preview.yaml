@@ -1,0 +1,10 @@
+# Create this as a SEPARATE Blueprint with this file's path. Do not replace
+# the existing root render.yaml: that Blueprint owns the authenticated API/DB.
+services:
+  - type: web
+    name: huddlecanvas-v8-preview
+    runtime: static
+    branch: m3/hosted-alpha
+    autoDeployTrigger: checksPass
+    buildCommand: node scripts/build-v8-preview.mjs
+    staticPublishPath: dist/v8-preview

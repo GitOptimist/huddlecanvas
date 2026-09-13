@@ -10,9 +10,11 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "build:v8-preview": "node scripts/build-v8-preview.mjs",
     "dev": "turbo run dev --parallel",
     "typecheck": "turbo run typecheck",
-    "test": "pnpm test:foundation && pnpm test:api",
+    "test": "pnpm test:foundation && pnpm test:api && pnpm test:v8-preview",
+    "test:v8-preview": "node --test scripts/build-v8-preview.test.mjs",
     "test:foundation": "node --experimental-strip-types --test packages/board-schema/src/*.test.ts packages/canvas-core/src/*.test.ts packages/authz/src/*.test.ts",
     "test:api": "node --experimental-strip-types --test apps/api/src/*.test.ts",
     "test:e2e": "pnpm --filter @huddlecanvas/e2e test",

@@ -1,6 +1,5 @@
 import {
   assertBoardDocument,
-  createEmptyBoard,
   type BoardDocument,
 } from "@huddlecanvas/board-schema";
 import type { Role } from "@huddlecanvas/authz";
@@ -10,6 +9,7 @@ import {
   RepositoryConflictError,
   RepositoryIdentityConflictError,
   RepositoryNotFoundError,
+  initialBoardDocument,
   type BoardAccess,
   type BoardRecord,
   type BoardRepositoryPort,
@@ -426,12 +426,16 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
     workspaceId: string;
     title: string;
     actorId: string;
+    initialDocument?: BoardDocument;
   }): Promise<BoardRecord> {
     await this.initialize();
     const boardId = id("brd");
-    const created = createEmptyBoard({
+    const created = initialBoardDocument({
       boardId,
-      title: input.title.trim() || "Untitled board",
+      title: input.title,
+      ...(input.initialDocument
+        ? { initialDocument: input.initialDocument }
+        : {}),
     });
     return this.transaction(async (client) => {
       const board = await client.query<BoardRow>(
@@ -450,8 +454,14 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
       await client.query(
         `INSERT INTO huddlecanvas_board_versions
           (id, board_id, revision, document, created_at, created_by, reason)
-         VALUES ($1, $2, 1, $3::jsonb, NOW(), $4, 'Board created')`,
-        [id("ver"), boardId, JSON.stringify(created), input.actorId],
+         VALUES ($1, $2, 1, $3::jsonb, NOW(), $4, $5)`,
+        [
+          id("ver"),
+          boardId,
+          JSON.stringify(created),
+          input.actorId,
+          input.initialDocument ? "Imported v8 board" : "Board created",
+        ],
       );
       return boardRecord(board.rows[0]!);
     });

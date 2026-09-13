@@ -96,7 +96,7 @@ function selectLegacyBoard(
       );
     return selected;
   }
-  return root;
+  return record(root.board) ?? root;
 }
 
 function itemSize(
@@ -383,6 +383,7 @@ export function importLegacyV8(
       id,
       type === "sticky" ||
         type === "text" ||
+        type === "shape" ||
         type === "action" ||
         type === "checklist" ||
         type === "quiz" ||
@@ -422,6 +423,27 @@ export function importLegacyV8(
         },
         altText: stringValue(item.altText),
       } as TextObject;
+    } else if (type === "shape" && shapeMap[stringValue(item.shape)]) {
+      const x1 = numberValue(item.x1);
+      const y1 = numberValue(item.y1);
+      const x2 = numberValue(item.x2);
+      const y2 = numberValue(item.y2);
+      const kind = shapeMap[stringValue(item.shape)]!;
+      common.transform.x += Math.min(x1, x2);
+      common.transform.y += Math.min(y1, y2);
+      common.size.width = Math.max(1, Math.abs(x2 - x1));
+      common.size.height = Math.max(1, Math.abs(y2 - y1));
+      object = {
+        ...common,
+        type: "shape",
+        shape: kind,
+        style: {
+          stroke: stringValue(item.color, "#111827"),
+          strokeWidth: Math.max(0.5, numberValue(item.size, 2)),
+          fill: null,
+          opacity: 1,
+        },
+      } as ShapeObject;
     } else if (type === "action") {
       const owner = stringValue(item.owner);
       const rawDue = stringValue(item.due);

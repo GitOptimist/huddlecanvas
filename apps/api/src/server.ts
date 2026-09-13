@@ -5,7 +5,10 @@ import {
   type Capability,
   type Role,
 } from "@huddlecanvas/authz";
-import { assertBoardDocument } from "@huddlecanvas/board-schema";
+import {
+  assessLegacyV8,
+  assertBoardDocument,
+} from "@huddlecanvas/board-schema";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { readFile, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
@@ -56,6 +59,10 @@ interface DevSessionBody {
 
 interface CreateBoardBody {
   title?: unknown;
+}
+
+interface ImportV8Body {
+  payload?: unknown;
 }
 
 interface SaveBoardBody {
@@ -575,6 +582,52 @@ export function buildServer(options: BuildServerOptions = {}) {
       actorId: identity.userId,
     });
     return reply.code(201).send({ board });
+  });
+
+  server.post<{
+    Params: { workspaceId: string };
+    Body: ImportV8Body;
+  }>("/v1/workspaces/:workspaceId/boards/import-v8", async (request, reply) => {
+    const identity = await identityFor(
+      request,
+      identityVerifier,
+      signer,
+      sessionCookieName,
+      repository,
+    );
+    await workspaceRole(
+      repository,
+      request.params.workspaceId,
+      identity,
+      "board.edit",
+    );
+    let assessment: ReturnType<typeof assessLegacyV8>;
+    try {
+      assessment = assessLegacyV8(request.body?.payload, {
+        actorId: identity.userId,
+      });
+    } catch (caught) {
+      throw new RequestValidationError(
+        caught instanceof Error ? caught.message : "Invalid v8 board file.",
+      );
+    }
+    if (!assessment.canImport) {
+      return reply.code(422).send({
+        error: "lossy_import",
+        message:
+          "This v8 board needs more migration support. Nothing was imported.",
+        issues: assessment.issues,
+      });
+    }
+    const board = await repository.createBoard({
+      workspaceId: request.params.workspaceId,
+      title: assessment.document.title,
+      actorId: identity.userId,
+      initialDocument: assessment.document,
+    });
+    return reply
+      .code(201)
+      .send({ board, sourceBoardId: assessment.sourceBoardId });
   });
 
   server.get<{ Params: { boardId: string } }>(

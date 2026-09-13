@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { newDb } from "pg-mem";
 import type { Pool } from "pg";
+import { assessLegacyV8 } from "@huddlecanvas/board-schema";
 
 import { PostgresBoardRepository } from "./postgres-repository.ts";
 import {
@@ -106,6 +107,63 @@ test("PostgreSQL repository supports identity, boards, conflicts, and recovery",
     const reopened = await repository.boardAccess(board.id, user.id);
     assert.equal(reopened.board.revision, 3);
     assert.equal(reopened.role, "owner");
+  } finally {
+    await repository.close();
+  }
+});
+
+test("PostgreSQL stores an imported v8 board and initial version together", async () => {
+  const { repository } = repositoryFixture();
+  try {
+    const user = await repository.upsertUser({
+      externalSubject: "v8-import-user",
+      email: "v8@example.com",
+      displayName: "V8 User",
+    });
+    const access = await repository.ensurePersonalWorkspace(user);
+    const assessment = assessLegacyV8(
+      {
+        version: 8,
+        board: {
+          id: "original",
+          title: "Original v8",
+          grid: true,
+          background: "#fff",
+          ops: [],
+          items: [
+            {
+              id: "my-idea",
+              type: "sticky",
+              x: 100,
+              y: 100,
+              text: "Persist me",
+              bg: "#fff2a8",
+            },
+          ],
+          media: [],
+          versions: [],
+        },
+      },
+      { actorId: user.id },
+    );
+    assert.equal(assessment.canImport, true, JSON.stringify(assessment.issues));
+    const board = await repository.createBoard({
+      workspaceId: access.workspace.id,
+      title: assessment.document.title,
+      actorId: user.id,
+      initialDocument: assessment.document,
+    });
+    assert.notEqual(board.id, assessment.document.boardId);
+    assert.equal(board.document.boardId, board.id);
+    assert.equal(board.document.objects["sticky-my-idea"]?.type, "sticky");
+    const reopened = await repository.boardAccess(board.id, user.id);
+    assert.equal(
+      reopened.board.document.objects["sticky-my-idea"]?.type,
+      "sticky",
+    );
+    const versions = await repository.listVersions(board.id);
+    assert.equal(versions.length, 1);
+    assert.equal(versions[0]?.reason, "Imported v8 board");
   } finally {
     await repository.close();
   }

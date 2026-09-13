@@ -100,6 +100,7 @@ export interface BoardRepositoryPort {
     workspaceId: string;
     title: string;
     actorId: string;
+    initialDocument?: BoardDocument;
   }): Promise<BoardRecord>;
   saveBoard(input: {
     boardId: string;
@@ -120,6 +121,21 @@ export interface RepositoryStorage {
   readonly kind: "memory" | "file";
   load(): Promise<RepositoryState | null>;
   save(state: RepositoryState): Promise<void>;
+}
+
+export function initialBoardDocument(input: {
+  boardId: string;
+  title: string;
+  initialDocument?: BoardDocument;
+}): BoardDocument {
+  const title = input.title.trim() || "Untitled board";
+  if (!input.initialDocument)
+    return createEmptyBoard({ boardId: input.boardId, title });
+  return assertBoardDocument({
+    ...structuredClone(input.initialDocument),
+    boardId: input.boardId,
+    title,
+  });
 }
 
 export class RepositoryNotFoundError extends Error {
@@ -438,13 +454,17 @@ export class BoardRepository implements BoardRepositoryPort {
     workspaceId: string;
     title: string;
     actorId: string;
+    initialDocument?: BoardDocument;
   }): Promise<BoardRecord> {
     return this.mutate(() => {
       const createdAt = now();
       const boardId = id("brd");
-      const document = createEmptyBoard({
+      const document = initialBoardDocument({
         boardId,
-        title: input.title.trim() || "Untitled board",
+        title: input.title,
+        ...(input.initialDocument
+          ? { initialDocument: input.initialDocument }
+          : {}),
       });
       const board: BoardRecord = {
         id: boardId,
@@ -465,7 +485,7 @@ export class BoardRepository implements BoardRepositoryPort {
         document: structuredClone(document),
         createdAt,
         createdBy: input.actorId,
-        reason: "Board created",
+        reason: input.initialDocument ? "Imported v8 board" : "Board created",
       });
       return board;
     });

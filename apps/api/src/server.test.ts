@@ -213,6 +213,120 @@ test("authenticated owner can save, reopen, version, and recover a board", async
   await server.close();
 });
 
+test("authenticated v8 import creates a new board atomically and rejects lossy or read-only imports", async () => {
+  const repository = new BoardRepository(new MemoryStorage());
+  const server = buildServer({
+    repository,
+    signer: new SessionSigner(DEVELOPMENT_SECRET),
+    allowDevAuth: true,
+    logger: false,
+  });
+  await server.ready();
+  try {
+    const owner = await signIn(server, "v8-owner@example.com", "Owner");
+    const viewer = await signIn(server, "v8-viewer@example.com", "Viewer");
+    const workspaceId = (
+      await repository.listWorkspacesForUser(owner.session.user.id)
+    )[0]?.workspace.id;
+    assert.ok(workspaceId);
+    await repository.setMembership({
+      workspaceId,
+      userId: viewer.session.user.id,
+      role: "viewer",
+    });
+    const path = `/v1/workspaces/${workspaceId}/boards/import-v8`;
+    const payload = {
+      version: 8,
+      board: {
+        id: "source-board",
+        title: "Recovered from v8",
+        grid: true,
+        background: "#ffffff",
+        versions: [],
+        media: [],
+        ops: [],
+        items: [
+          {
+            id: "note",
+            type: "sticky",
+            x: 20,
+            y: 40,
+            text: "Keep this idea",
+            bg: "#fff2a8",
+            votes: 0,
+            comments: [],
+          },
+        ],
+      },
+    };
+    const before = (await repository.listBoards(workspaceId)).length;
+    const unauthenticated = await server.inject({
+      method: "POST",
+      url: path,
+      payload: { payload },
+    });
+    assert.equal(unauthenticated.statusCode, 401);
+    const unauthorized = await server.inject({
+      method: "POST",
+      url: path,
+      headers: bearer(viewer.token),
+      payload: { payload },
+    });
+    assert.equal(unauthorized.statusCode, 403);
+    const lossy = await server.inject({
+      method: "POST",
+      url: path,
+      headers: bearer(owner.token),
+      payload: {
+        payload: {
+          ...payload,
+          board: {
+            ...payload.board,
+            media: [{ id: "photo", src: "data:image/png;base64,abc" }],
+          },
+        },
+      },
+    });
+    assert.equal(lossy.statusCode, 422, lossy.body);
+    assert.equal(lossy.json<{ error: string }>().error, "lossy_import");
+    assert.equal((await repository.listBoards(workspaceId)).length, before);
+    const imported = await server.inject({
+      method: "POST",
+      url: path,
+      headers: bearer(owner.token),
+      payload: { payload },
+    });
+    assert.equal(imported.statusCode, 201, imported.body);
+    const created = imported.json<BoardResponse & { sourceBoardId: string }>();
+    assert.equal(created.sourceBoardId, "source-board");
+    assert.equal(created.board.title, "Recovered from v8");
+    assert.equal(Object.keys(created.board.document.objects).length, 1);
+    assert.equal(created.board.revision, 1);
+    assert.equal((await repository.listBoards(workspaceId)).length, before + 1);
+    const reopened = await server.inject({
+      method: "GET",
+      url: `/v1/boards/${created.board.id}`,
+      headers: bearer(owner.token),
+    });
+    assert.equal(
+      reopened.json<BoardResponse>().board.document.objects["sticky-note"]
+        ?.type,
+      "sticky",
+    );
+    const versions = await server.inject({
+      method: "GET",
+      url: `/v1/boards/${created.board.id}/versions`,
+      headers: bearer(owner.token),
+    });
+    assert.equal(
+      versions.json<VersionsResponse>().versions[0]?.reason,
+      "Imported v8 board",
+    );
+  } finally {
+    await server.close();
+  }
+});
+
 test("API mutations enforce workspace roles", async () => {
   const repository = new BoardRepository(new MemoryStorage());
   const signer = new SessionSigner(DEVELOPMENT_SECRET);

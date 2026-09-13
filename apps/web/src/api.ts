@@ -1,4 +1,7 @@
-import type { BoardDocument } from "@huddlecanvas/board-schema";
+import type {
+  BoardDocument,
+  LegacyImportIssue,
+} from "@huddlecanvas/board-schema";
 
 export type Role =
   "owner" | "editor" | "commenter" | "viewer" | "guest-session";
@@ -59,10 +62,16 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly currentRevision?: number;
+  readonly issues?: LegacyImportIssue[];
 
   constructor(
     message: string,
-    options: { status: number; code: string; currentRevision?: number },
+    options: {
+      status: number;
+      code: string;
+      currentRevision?: number;
+      issues?: LegacyImportIssue[];
+    },
   ) {
     super(message);
     this.name = "ApiError";
@@ -71,6 +80,7 @@ export class ApiError extends Error {
     if (options.currentRevision !== undefined) {
       this.currentRevision = options.currentRevision;
     }
+    if (options.issues) this.issues = options.issues;
   }
 }
 
@@ -91,6 +101,7 @@ async function request<T>(
     error?: string;
     message?: string;
     currentRevision?: number;
+    issues?: LegacyImportIssue[];
   };
   if (!response.ok) {
     throw new ApiError(
@@ -101,6 +112,7 @@ async function request<T>(
         ...(payload.currentRevision === undefined
           ? {}
           : { currentRevision: payload.currentRevision }),
+        ...(payload.issues ? { issues: payload.issues } : {}),
       },
     );
   }
@@ -156,6 +168,17 @@ export async function createBoard(
   return request<{ board: BoardRecord }>(
     `/v1/workspaces/${workspaceId}/boards`,
     { token, method: "POST", body: JSON.stringify({ title }) },
+  );
+}
+
+export async function importV8Board(
+  token: string | undefined,
+  workspaceId: string,
+  payload: unknown,
+) {
+  return request<{ board: BoardRecord; sourceBoardId: string }>(
+    `/v1/workspaces/${workspaceId}/boards/import-v8`,
+    { token, method: "POST", body: JSON.stringify({ payload }) },
   );
 }
 
