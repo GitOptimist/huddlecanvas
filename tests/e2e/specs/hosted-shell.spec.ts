@@ -173,9 +173,17 @@ test("resizes, rotates, locks and unlocks one object through canonical history",
   await page.getByRole("button", { name: "Close inspector" }).click();
 
   const object = page.getByRole("button", { name: "sticky object" });
-  const originalWidth = await object.evaluate((element) =>
-    Number.parseFloat((element as HTMLElement).style.width),
-  );
+  const geometry = () =>
+    object.evaluate((element) => {
+      const style = (element as HTMLElement).style;
+      const rotation = /rotate\((-?[\d.]+)deg\)/.exec(style.transform);
+      return {
+        width: Number.parseFloat(style.width),
+        height: Number.parseFloat(style.height),
+        rotation: Number(rotation?.[1] ?? 0),
+      };
+    });
+  const original = await geometry();
   const resize = page.getByRole("button", { name: "Resize selected object" });
   const resizeBox = await resize.boundingBox();
   if (!resizeBox) throw new Error("Resize handle is not visible");
@@ -187,12 +195,12 @@ test("resizes, rotates, locks and unlocks one object through canonical history",
   await page.mouse.move(resizeBox.x + 70, resizeBox.y + 45, { steps: 6 });
   await page.mouse.up();
   await expect
-    .poll(() =>
-      object.evaluate((element) =>
-        Number.parseFloat((element as HTMLElement).style.width),
-      ),
-    )
-    .toBeGreaterThan(originalWidth + 40);
+    .poll(async () => (await geometry()).width)
+    .toBeGreaterThan(original.width + 40);
+  await expect
+    .poll(async () => (await geometry()).height)
+    .toBeGreaterThan(original.height + 20);
+  const resized = await geometry();
 
   const rotate = page.getByRole("button", { name: "Rotate selected object" });
   const rotateBox = await rotate.boundingBox();
@@ -209,12 +217,44 @@ test("resizes, rotates, locks and unlocks one object through canonical history",
   });
   await page.mouse.up();
   await expect
-    .poll(() =>
-      object.evaluate((element) => (element as HTMLElement).style.transform),
-    )
-    .not.toContain("rotate(0deg)");
+    .poll(async () => (await geometry()).rotation)
+    .toBeGreaterThan(15);
+  await expect.poll(async () => (await geometry()).rotation).toBeLessThan(165);
 
-  await page.getByRole("button", { name: "Lock", exact: true }).click();
+  const pointerRotated = await geometry();
+  await page
+    .getByRole("button", { name: "Rotate selected object right 15 degrees" })
+    .click();
+  const keyboardRotated = {
+    ...pointerRotated,
+    rotation: (pointerRotated.rotation + 15) % 360,
+  };
+  await expect.poll(geometry).toEqual(keyboardRotated);
+  await page.getByRole("button", { name: /Undo/ }).click();
+  await expect.poll(geometry).toEqual(pointerRotated);
+  await page.getByRole("button", { name: /Redo/ }).click();
+  await expect.poll(geometry).toEqual(keyboardRotated);
+
+  await page
+    .getByRole("button", { name: "Make selected object smaller" })
+    .click();
+  const smaller = {
+    width: Math.max(32, Math.round(keyboardRotated.width * 0.9)),
+    height: Math.max(32, Math.round(keyboardRotated.height * 0.9)),
+    rotation: keyboardRotated.rotation,
+  };
+  await expect.poll(geometry).toEqual(smaller);
+  await page.getByRole("button", { name: /Undo/ }).click();
+  await expect.poll(geometry).toEqual(keyboardRotated);
+
+  expect(resized.width).toBeGreaterThan(original.width);
+  expect(resized.height).toBeGreaterThan(original.height);
+
+  await page
+    .getByRole("button", {
+      name: "Lock selection to prevent accidental edits",
+    })
+    .click();
   await expect(
     page.getByRole("button", { name: "sticky object, locked" }),
   ).toBeVisible();
@@ -233,7 +273,9 @@ test("resizes, rotates, locks and unlocks one object through canonical history",
   await expect(
     page.getByRole("button", { name: "sticky object, locked" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Unlock", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Unlock selection to allow editing" })
+    .click();
   await expect(
     page.getByRole("button", { name: "sticky object" }),
   ).toBeVisible();
@@ -241,24 +283,20 @@ test("resizes, rotates, locks and unlocks one object through canonical history",
     timeout: 10_000,
   });
 
-  const persistedWidth = await object.evaluate((element) =>
-    Number.parseFloat((element as HTMLElement).style.width),
-  );
-  const persistedTransform = await object.evaluate(
-    (element) => (element as HTMLElement).style.transform,
-  );
+  const persisted = await geometry();
   await page.reload();
   const reloaded = page.getByRole("button", { name: "sticky object" });
   await expect
     .poll(() =>
-      reloaded.evaluate((element) =>
-        Number.parseFloat((element as HTMLElement).style.width),
-      ),
+      reloaded.evaluate((element) => {
+        const style = (element as HTMLElement).style;
+        const rotation = /rotate\((-?[\d.]+)deg\)/.exec(style.transform);
+        return {
+          width: Number.parseFloat(style.width),
+          height: Number.parseFloat(style.height),
+          rotation: Number(rotation?.[1] ?? 0),
+        };
+      }),
     )
-    .toBe(persistedWidth);
-  await expect
-    .poll(() =>
-      reloaded.evaluate((element) => (element as HTMLElement).style.transform),
-    )
-    .toBe(persistedTransform);
+    .toEqual(persisted);
 });

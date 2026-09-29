@@ -15,10 +15,18 @@ export type BoardCommand =
   | { type: "object.move"; objectIds: ID[]; deltaX: number; deltaY: number }
   | { type: "object.resize"; objectId: ID; size: Size }
   | { type: "object.rotate"; objectId: ID; rotation: number }
+  | { type: "object.transform"; patches: readonly ObjectTransformPatch[] }
   | { type: "object.lock"; objectIds: ID[]; locked: boolean }
   | { type: "object.reparent"; objectId: ID; parentId: ID | null }
   | { type: "object.reorder"; objectId: ID; beforeId: ID | null }
   | { type: "board.rename"; title: string };
+
+export interface ObjectTransformPatch {
+  objectId: ID;
+  position?: { x: number; y: number };
+  size?: Size;
+  rotation?: number;
+}
 
 export interface CommandContext {
   actorId: ID;
@@ -57,6 +65,86 @@ function requireObject(board: BoardDocument, id: ID): BoardObject {
 function assertMutable(object: BoardObject): void {
   if (object.locked) {
     throw new CommandError(`Object '${object.id}' is locked.`, "object.locked");
+  }
+}
+
+const MAX_COORDINATE = 1_000_000;
+const MIN_DIMENSION = 1;
+const MAX_DIMENSION = 100_000;
+
+function applyTransforms(
+  board: BoardDocument,
+  patches: readonly ObjectTransformPatch[],
+  context: CommandContext,
+): void {
+  if (!patches.length) {
+    throw new CommandError(
+      "At least one object transform is required.",
+      "transform.empty",
+    );
+  }
+  const seen = new Set<ID>();
+  for (const patch of patches) {
+    if (seen.has(patch.objectId)) {
+      throw new CommandError(
+        `Object '${patch.objectId}' has more than one transform patch.`,
+        "transform.duplicate_object",
+      );
+    }
+    seen.add(patch.objectId);
+    const object = requireObject(board, patch.objectId);
+    assertMutable(object);
+    if (!patch.position && !patch.size && patch.rotation === undefined) {
+      throw new CommandError(
+        `Object '${patch.objectId}' has an empty transform patch.`,
+        "transform.empty_patch",
+      );
+    }
+    if (
+      patch.position &&
+      (!Number.isFinite(patch.position.x) ||
+        !Number.isFinite(patch.position.y) ||
+        Math.abs(patch.position.x) > MAX_COORDINATE ||
+        Math.abs(patch.position.y) > MAX_COORDINATE)
+    ) {
+      throw new CommandError(
+        "Object position is outside the supported canvas bounds.",
+        "transform.invalid_position",
+      );
+    }
+    if (
+      patch.size &&
+      (!Number.isFinite(patch.size.width) ||
+        !Number.isFinite(patch.size.height) ||
+        patch.size.width < MIN_DIMENSION ||
+        patch.size.height < MIN_DIMENSION ||
+        patch.size.width > MAX_DIMENSION ||
+        patch.size.height > MAX_DIMENSION)
+    ) {
+      throw new CommandError(
+        "Object dimensions are outside the supported bounds.",
+        "size.invalid",
+      );
+    }
+    if (patch.rotation !== undefined && !Number.isFinite(patch.rotation)) {
+      throw new CommandError(
+        "Object rotation must be a finite number.",
+        "transform.invalid",
+      );
+    }
+  }
+
+  for (const patch of patches) {
+    const object = requireObject(board, patch.objectId);
+    if (patch.position) {
+      object.transform.x = patch.position.x;
+      object.transform.y = patch.position.y;
+    }
+    if (patch.size) object.size = { ...patch.size };
+    if (patch.rotation !== undefined) {
+      object.transform.rotation = ((patch.rotation % 360) + 360) % 360;
+    }
+    touch(object, context);
   }
 }
 
@@ -324,6 +412,9 @@ export function applyBoardCommand(
       touch(object, context);
       break;
     }
+    case "object.transform":
+      applyTransforms(board, command.patches, context);
+      break;
     case "object.lock":
       for (const id of command.objectIds) {
         const object = requireObject(board, id);

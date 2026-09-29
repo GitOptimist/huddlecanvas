@@ -163,6 +163,127 @@ test("invalid transforms and locked resize or rotation are rejected", () => {
   );
 });
 
+test("object.transform applies multiple patches atomically with one generation", () => {
+  const board = createEmptyBoard({ boardId: "board-atomic-transform" });
+  board.objects.a = sticky("a", 10, 20);
+  board.objects.b = sticky("b", 200, 220);
+  board.rootOrder = ["a", "b"];
+
+  const transformed = applyBoardCommand(
+    board,
+    {
+      type: "object.transform",
+      patches: [
+        { objectId: "a", position: { x: 30, y: 45 } },
+        {
+          objectId: "b",
+          position: { x: 240, y: 260 },
+          size: { width: 180, height: 140 },
+          rotation: 375,
+        },
+      ],
+    },
+    context,
+  );
+
+  assert.deepEqual(
+    {
+      x: transformed.objects.a?.transform.x,
+      y: transformed.objects.a?.transform.y,
+    },
+    { x: 30, y: 45 },
+  );
+  assert.deepEqual(transformed.objects.b?.size, { width: 180, height: 140 });
+  assert.equal(transformed.objects.b?.transform.rotation, 15);
+  assert.equal(transformed.generation, 1);
+  assert.equal(board.objects.a?.transform.x, 10);
+  assert.equal(board.objects.b?.transform.rotation, 0);
+});
+
+test("object.transform prevalidates every patch before applying any", () => {
+  const board = createEmptyBoard({ boardId: "board-atomic-reject" });
+  board.objects.a = sticky("a", 10, 20);
+  board.objects.b = { ...sticky("b", 200, 220), locked: true };
+  board.rootOrder = ["a", "b"];
+
+  assert.throws(
+    () =>
+      applyBoardCommand(
+        board,
+        {
+          type: "object.transform",
+          patches: [
+            { objectId: "a", position: { x: 80, y: 90 } },
+            { objectId: "b", rotation: 45 },
+          ],
+        },
+        context,
+      ),
+    (error) => error instanceof CommandError && error.code === "object.locked",
+  );
+  assert.equal(board.objects.a?.transform.x, 10);
+  assert.equal(board.objects.b?.transform.rotation, 0);
+
+  for (const command of [
+    {
+      type: "object.transform",
+      patches: [{ objectId: "a", size: { width: 0, height: 80 } }],
+    },
+    {
+      type: "object.transform",
+      patches: [{ objectId: "a", size: { width: 0.5, height: 80 } }],
+    },
+    {
+      type: "object.transform",
+      patches: [{ objectId: "a", size: { width: 100_001, height: 80 } }],
+    },
+    {
+      type: "object.transform",
+      patches: [{ objectId: "a", position: { x: Number.NaN, y: 40 } }],
+    },
+  ] as const) {
+    assert.throws(() => applyBoardCommand(board, command, context));
+  }
+  assert.throws(
+    () =>
+      applyBoardCommand(
+        board,
+        {
+          type: "object.move",
+          objectIds: ["a"],
+          deltaX: Number.POSITIVE_INFINITY,
+          deltaY: 0,
+        },
+        context,
+      ),
+    (error) =>
+      error instanceof CommandError && error.code === "transform.invalid",
+  );
+});
+
+test("multi-object lock changes are atomic and reversible", () => {
+  const board = createEmptyBoard({ boardId: "board-multi-lock" });
+  board.objects.a = sticky("a");
+  board.objects.b = sticky("b");
+  board.rootOrder = ["a", "b"];
+
+  const locked = applyBoardCommand(
+    board,
+    { type: "object.lock", objectIds: ["a", "b"], locked: true },
+    context,
+  );
+  assert.equal(locked.objects.a?.locked, true);
+  assert.equal(locked.objects.b?.locked, true);
+  assert.equal(locked.generation, 1);
+  const unlocked = applyBoardCommand(
+    locked,
+    { type: "object.lock", objectIds: ["a", "b"], locked: false },
+    context,
+  );
+  assert.equal(unlocked.objects.a?.locked, false);
+  assert.equal(unlocked.objects.b?.locked, false);
+});
+
 test("removing a bound object preserves the connector at the former anchor", () => {
   const board = createEmptyBoard({ boardId: "board-1" });
   board.objects.note = sticky("note", 20, 30);

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -989,43 +990,51 @@ export function CanvasPreview({
           const rendered = renderObject(object);
           if (!rendered || object.hidden || erasedPreview.includes(object.id))
             return null;
-          return (
-            <div
-              key={object.id}
-              className={`canvas-object hosted-object${selectedObjectIds.includes(object.id) ? " selected" : ""}${effectiveTool === "select" && onObjectsMove && !object.locked ? " movable" : ""}`}
-              style={{
-                ...objectStyle(object),
-                ...(transformPreview?.objectId === object.id
-                  ? {
-                      width: transformPreview.width ?? object.size.width,
-                      height: transformPreview.height ?? object.size.height,
-                      transform: `rotate(${transformPreview.rotation ?? object.transform.rotation}deg) scale(${object.transform.scaleX}, ${object.transform.scaleY})`,
-                    }
-                  : {}),
-                ...(dragPreview?.ids.includes(object.id)
-                  ? {
-                      left: object.transform.x + dragPreview.dx,
-                      top: object.transform.y + dragPreview.dy,
-                    }
-                  : {}),
-              }}
-              tabIndex={effectiveTool === "select" ? 0 : -1}
-              role="button"
-              aria-label={`${object.type} object${object.locked ? ", locked" : ""}`}
-              onPointerDown={(event) => objectPointerDown(event, object)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelectionChange?.([object.id]);
+          const previewStyle =
+            transformPreview?.objectId === object.id
+              ? {
+                  width: transformPreview.width ?? object.size.width,
+                  height: transformPreview.height ?? object.size.height,
+                  transform: `rotate(${transformPreview.rotation ?? object.transform.rotation}deg) scale(${object.transform.scaleX}, ${object.transform.scaleY})`,
                 }
-              }}
-            >
-              {rendered}
+              : {};
+          return (
+            <Fragment key={object.id}>
+              <div
+                className={`canvas-object hosted-object${selectedObjectIds.includes(object.id) ? " selected" : ""}${effectiveTool === "select" && onObjectsMove && !object.locked ? " movable" : ""}`}
+                style={{
+                  ...objectStyle(object),
+                  ...previewStyle,
+                  ...(dragPreview?.ids.includes(object.id)
+                    ? {
+                        left: object.transform.x + dragPreview.dx,
+                        top: object.transform.y + dragPreview.dy,
+                      }
+                    : {}),
+                }}
+                tabIndex={effectiveTool === "select" ? 0 : -1}
+                role="button"
+                aria-label={`${object.type} object${object.locked ? ", locked" : ""}`}
+                onPointerDown={(event) => objectPointerDown(event, object)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectionChange?.([object.id]);
+                  }
+                }}
+              >
+                {rendered}
+              </div>
               {canEdit &&
               selectedObjectIds.length === 1 &&
               selectedObjectIds[0] === object.id &&
               !object.locked ? (
-                <>
+                <div
+                  className="object-transform-controls"
+                  role="group"
+                  aria-label="Pointer transform controls"
+                  style={{ ...objectStyle(object), ...previewStyle }}
+                >
                   <button
                     type="button"
                     className="object-transform-handle object-rotate-handle"
@@ -1040,9 +1049,9 @@ export function CanvasPreview({
                     title="Resize"
                     onPointerDown={(event) => resizePointerDown(event, object)}
                   />
-                </>
+                </div>
               ) : null}
-            </div>
+            </Fragment>
           );
         })}
         {lassoPreview ? (

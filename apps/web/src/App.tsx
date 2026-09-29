@@ -14,7 +14,11 @@ import {
   type StrokeStyle,
   type TextObject,
 } from "@huddlecanvas/board-schema";
-import { applyBoardCommand } from "@huddlecanvas/canvas-core";
+import {
+  applyBoardCommand,
+  type BoardCommand,
+  type ObjectTransformPatch,
+} from "@huddlecanvas/canvas-core";
 
 import {
   ApiError,
@@ -438,15 +442,9 @@ export default function App() {
     };
   }, [openBoard, refreshBoardList, token]);
 
-  function updateDocument(
-    update: (document: BoardDocument) => void,
-    reason: string,
-  ) {
+  function commitDocument(document: BoardDocument, reason: string) {
     const current = boardRef.current;
     if (!canEdit || !current) return;
-    const document = structuredClone(current.document);
-    update(document);
-    document.generation = current.document.generation + 1;
     if (editHistory.current.boardId !== current.id) {
       resetEditHistory(current.id);
     }
@@ -470,6 +468,31 @@ export default function App() {
     setDirty(true);
     dirtyRef.current = true;
     setSaveState("unsaved");
+  }
+
+  function dispatchBoardCommand(command: BoardCommand, reason: string) {
+    const current = boardRef.current;
+    if (!canEdit || !current || !identity) return;
+    const document = applyBoardCommand(current.document, command, {
+      actorId: identity.userId,
+      now: new Date().toISOString(),
+    });
+    commitDocument(document, reason);
+  }
+
+  // Transitional boundary: creation and text/style editing still mutate a cloned
+  // document here. New durable interactions must use dispatchBoardCommand. These
+  // remaining direct mutations are tracked in ADR 0002 for command migration.
+  function updateDocument(
+    update: (document: BoardDocument) => void,
+    reason: string,
+  ) {
+    const current = boardRef.current;
+    if (!canEdit || !current) return;
+    const document = structuredClone(current.document);
+    update(document);
+    document.generation = current.document.generation + 1;
+    commitDocument(document, reason);
   }
 
   function travelHistory(direction: "undo" | "redo") {
@@ -829,97 +852,95 @@ export default function App() {
       const object = boardRef.current?.document.objects[id];
       return object?.type === "stroke" && !object.locked;
     });
-    if (!ids.length || !identity) return;
-    updateDocument((document) => {
-      Object.assign(
-        document,
-        applyBoardCommand(
-          document,
-          {
-            type: "object.remove",
-            objectIds: ids,
-          },
-          { actorId: identity.userId, now: new Date().toISOString() },
-        ),
-      );
-    }, "Erased ink");
+    if (!ids.length) return;
+    dispatchBoardCommand(
+      { type: "object.remove", objectIds: ids },
+      "Erased ink",
+    );
     if (selectedObjectIds.some((id) => ids.includes(id)))
       setSelectedObjectIds([]);
   }
 
   function moveObjects(objectIds: string[], dx: number, dy: number) {
-    if (!identity) return;
     if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
-    updateDocument(
-      (document) => {
-        Object.assign(
-          document,
-          applyBoardCommand(
-            document,
+    const document = boardRef.current?.document;
+    if (!document) return;
+    const patches: ObjectTransformPatch[] = objectIds.flatMap((objectId) => {
+      const object = document.objects[objectId];
+      return object
+        ? [
             {
-              type: "object.move",
-              objectIds,
-              deltaX: Math.round(dx),
-              deltaY: Math.round(dy),
+              objectId,
+              position: {
+                x: object.transform.x + Math.round(dx),
+                y: object.transform.y + Math.round(dy),
+              },
             },
-            { actorId: identity.userId, now: new Date().toISOString() },
-          ),
-        );
-      },
+          ]
+        : [];
+    });
+    if (!patches.length) return;
+    dispatchBoardCommand(
+      { type: "object.transform", patches },
       objectIds.length > 1 ? "Moved objects" : "Moved object",
     );
   }
 
   function resizeObject(objectId: string, width: number, height: number) {
-    if (!identity) return;
-    updateDocument((document) => {
-      Object.assign(
-        document,
-        applyBoardCommand(
-          document,
-          {
-            type: "object.resize",
-            objectId,
-            size: { width, height },
-          },
-          { actorId: identity.userId, now: new Date().toISOString() },
-        ),
-      );
-    }, "Resized object");
+    dispatchBoardCommand(
+      {
+        type: "object.transform",
+        patches: [{ objectId, size: { width, height } }],
+      },
+      "Resized object",
+    );
   }
 
   function rotateObject(objectId: string, rotation: number) {
-    if (!identity) return;
-    updateDocument((document) => {
-      Object.assign(
-        document,
-        applyBoardCommand(
-          document,
-          { type: "object.rotate", objectId, rotation },
-          { actorId: identity.userId, now: new Date().toISOString() },
-        ),
-      );
-    }, "Rotated object");
+    dispatchBoardCommand(
+      {
+        type: "object.transform",
+        patches: [{ objectId, rotation }],
+      },
+      "Rotated object",
+    );
+  }
+
+  function resizeSelectedBy(factor: number) {
+    if (!selectedObject || selectedObject.locked) return;
+    const width = Math.min(
+      4_000,
+      Math.max(32, Math.round(selectedObject.size.width * factor)),
+    );
+    const height = Math.min(
+      4_000,
+      Math.max(32, Math.round(selectedObject.size.height * factor)),
+    );
+    if (
+      width === selectedObject.size.width &&
+      height === selectedObject.size.height
+    )
+      return;
+    resizeObject(selectedObject.id, width, height);
+  }
+
+  function rotateSelectedBy(degrees: number) {
+    if (!selectedObject || selectedObject.locked) return;
+    rotateObject(
+      selectedObject.id,
+      selectedObject.transform.rotation + degrees,
+    );
   }
 
   function toggleSelectionLock() {
-    if (!identity || !selectedObjectIds.length) return;
+    if (!selectedObjectIds.length) return;
     const objectIds = selectedObjectIds.filter(
       (id) => boardRef.current?.document.objects[id],
     );
     if (!objectIds.length) return;
     const locked = !selectionIsLocked;
-    updateDocument(
-      (document) => {
-        Object.assign(
-          document,
-          applyBoardCommand(
-            document,
-            { type: "object.lock", objectIds, locked },
-            { actorId: identity.userId, now: new Date().toISOString() },
-          ),
-        );
-      },
+    dispatchBoardCommand(
+      { type: "object.lock", objectIds, locked },
       locked ? "Locked objects" : "Unlocked objects",
     );
   }
@@ -930,21 +951,9 @@ export default function App() {
       const object = boardRef.current?.document.objects[id];
       return object && !object.locked;
     });
-    if (!deletable.length || !identity) return;
-    updateDocument(
-      (document) => {
-        Object.assign(
-          document,
-          applyBoardCommand(
-            document,
-            {
-              type: "object.remove",
-              objectIds: deletable,
-            },
-            { actorId: identity.userId, now: new Date().toISOString() },
-          ),
-        );
-      },
+    if (!deletable.length) return;
+    dispatchBoardCommand(
+      { type: "object.remove", objectIds: deletable },
       deletable.length > 1 ? "Deleted objects" : "Deleted object",
     );
     setSelectedObjectIds([]);
@@ -1432,11 +1441,54 @@ export default function App() {
                 aria-label="Selection actions"
               >
                 <span>{selectedObjectIds.length} selected</span>
+                {selectedObject && !selectedObject.locked ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => resizeSelectedBy(0.9)}
+                      aria-label="Make selected object smaller"
+                      title="Make smaller"
+                    >
+                      Size −
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => resizeSelectedBy(1.1)}
+                      aria-label="Make selected object larger"
+                      title="Make larger"
+                    >
+                      Size +
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => rotateSelectedBy(-15)}
+                      aria-label="Rotate selected object left 15 degrees"
+                      title="Rotate left 15°"
+                    >
+                      ↶ 15°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => rotateSelectedBy(15)}
+                      aria-label="Rotate selected object right 15 degrees"
+                      title="Rotate right 15°"
+                    >
+                      ↷ 15°
+                    </button>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   onClick={toggleSelectionLock}
+                  aria-label={
+                    selectionIsLocked
+                      ? "Unlock selection to allow editing"
+                      : "Lock selection to prevent accidental edits"
+                  }
                   title={
-                    selectionIsLocked ? "Unlock selection" : "Lock selection"
+                    selectionIsLocked
+                      ? "Allow edits to this selection"
+                      : "Prevent accidental edits to this selection"
                   }
                 >
                   {selectionIsLocked ? "Unlock" : "Lock"}

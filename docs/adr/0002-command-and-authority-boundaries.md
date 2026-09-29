@@ -23,3 +23,22 @@ Presence and cursor movement are ephemeral messages. They do not modify the dura
 - Connector endpoints remain valid when their target is removed.
 - Rejected or stale commands have explicit outcomes.
 - A future CRDT choice must preserve these authority and durability rules.
+
+## Hosted client migration status
+
+`apps/web/src/App.tsx` has one `dispatchBoardCommand` path for durable commands.
+That path applies the pure command once, records one undo entry, and marks the
+result for autosave. Object movement, resize, rotation, lock/unlock, deletion,
+and stroke erasure use this boundary.
+
+The temporary `updateDocument` compatibility path remains for object creation,
+duplication, sticky/text content and style edits, and board-title typing. These
+mutations still clone the document and advance generation, but should move to
+typed commands incrementally. New durable interactions must not add more direct
+mutation call sites.
+
+The browser command dispatcher is not an authorization boundary. A follow-up
+milestone must expose a server-authoritative command API that authenticates the
+actor, checks capabilities and base generation, applies the same command
+semantics, persists the accepted result, and returns the canonical document.
+That backend migration is intentionally outside the M3.5.1 recovery slice.
