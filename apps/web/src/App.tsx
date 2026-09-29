@@ -327,6 +327,11 @@ export default function App() {
     const object = activeBoard?.document.objects[id];
     return object && !object.locked;
   });
+  const selectionIsLocked =
+    selectedObjectIds.length > 0 &&
+    selectedObjectIds.every(
+      (id) => activeBoard?.document.objects[id]?.locked === true,
+    );
 
   useEffect(() => {
     if (selectedObjectId) setInspectorOpen(true);
@@ -865,6 +870,60 @@ export default function App() {
     );
   }
 
+  function resizeObject(objectId: string, width: number, height: number) {
+    if (!identity) return;
+    updateDocument((document) => {
+      Object.assign(
+        document,
+        applyBoardCommand(
+          document,
+          {
+            type: "object.resize",
+            objectId,
+            size: { width, height },
+          },
+          { actorId: identity.userId, now: new Date().toISOString() },
+        ),
+      );
+    }, "Resized object");
+  }
+
+  function rotateObject(objectId: string, rotation: number) {
+    if (!identity) return;
+    updateDocument((document) => {
+      Object.assign(
+        document,
+        applyBoardCommand(
+          document,
+          { type: "object.rotate", objectId, rotation },
+          { actorId: identity.userId, now: new Date().toISOString() },
+        ),
+      );
+    }, "Rotated object");
+  }
+
+  function toggleSelectionLock() {
+    if (!identity || !selectedObjectIds.length) return;
+    const objectIds = selectedObjectIds.filter(
+      (id) => boardRef.current?.document.objects[id],
+    );
+    if (!objectIds.length) return;
+    const locked = !selectionIsLocked;
+    updateDocument(
+      (document) => {
+        Object.assign(
+          document,
+          applyBoardCommand(
+            document,
+            { type: "object.lock", objectIds, locked },
+            { actorId: identity.userId, now: new Date().toISOString() },
+          ),
+        );
+      },
+      locked ? "Locked objects" : "Unlocked objects",
+    );
+  }
+
   function deleteSelection() {
     if (!selectedObjectIds.length) return;
     const deletable = selectedObjectIds.filter((id) => {
@@ -1350,6 +1409,8 @@ export default function App() {
                 {...(canEdit
                   ? {
                       onObjectsMove: moveObjects,
+                      onObjectResize: resizeObject,
+                      onObjectRotate: rotateObject,
                       onAddSticky: addSticky,
                       onAddText: addText,
                       onAddShape: addShape,
@@ -1371,6 +1432,15 @@ export default function App() {
                 aria-label="Selection actions"
               >
                 <span>{selectedObjectIds.length} selected</span>
+                <button
+                  type="button"
+                  onClick={toggleSelectionLock}
+                  title={
+                    selectionIsLocked ? "Unlock selection" : "Lock selection"
+                  }
+                >
+                  {selectionIsLocked ? "Unlock" : "Lock"}
+                </button>
                 <button
                   type="button"
                   disabled={!canDuplicateSelection}

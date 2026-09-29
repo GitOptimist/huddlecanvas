@@ -14,6 +14,7 @@ export type BoardCommand =
   | { type: "object.remove"; objectIds: ID[] }
   | { type: "object.move"; objectIds: ID[]; deltaX: number; deltaY: number }
   | { type: "object.resize"; objectId: ID; size: Size }
+  | { type: "object.rotate"; objectId: ID; rotation: number }
   | { type: "object.lock"; objectIds: ID[]; locked: boolean }
   | { type: "object.reparent"; objectId: ID; parentId: ID | null }
   | { type: "object.reorder"; objectId: ID; beforeId: ID | null }
@@ -275,6 +276,15 @@ export function applyBoardCommand(
       applyRemove(board, command.objectIds, context);
       break;
     case "object.move":
+      if (
+        !Number.isFinite(command.deltaX) ||
+        !Number.isFinite(command.deltaY)
+      ) {
+        throw new CommandError(
+          "Movement deltas must be finite numbers.",
+          "transform.invalid",
+        );
+      }
       for (const id of command.objectIds) {
         const object = requireObject(board, id);
         assertMutable(object);
@@ -286,13 +296,31 @@ export function applyBoardCommand(
     case "object.resize": {
       const object = requireObject(board, command.objectId);
       assertMutable(object);
-      if (command.size.width <= 0 || command.size.height <= 0) {
+      if (
+        !Number.isFinite(command.size.width) ||
+        !Number.isFinite(command.size.height) ||
+        command.size.width <= 0 ||
+        command.size.height <= 0
+      ) {
         throw new CommandError(
           "Object dimensions must be greater than zero.",
           "size.invalid",
         );
       }
       object.size = { ...command.size };
+      touch(object, context);
+      break;
+    }
+    case "object.rotate": {
+      const object = requireObject(board, command.objectId);
+      assertMutable(object);
+      if (!Number.isFinite(command.rotation)) {
+        throw new CommandError(
+          "Object rotation must be a finite number.",
+          "transform.invalid",
+        );
+      }
+      object.transform.rotation = ((command.rotation % 360) + 360) % 360;
       touch(object, context);
       break;
     }

@@ -1374,6 +1374,41 @@ nav {
   outline-offset: 4px;
   box-shadow: 0 0 0 7px rgba(101, 87, 200, 0.08);
 }
+.object-transform-handle {
+  position: absolute;
+  z-index: 4;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #6557c8;
+  box-shadow: 0 0 0 1px #6557c8;
+  touch-action: none;
+}
+.object-resize-handle {
+  right: -11px;
+  bottom: -11px;
+  cursor: nwse-resize;
+}
+.object-rotate-handle {
+  top: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: grab;
+}
+.object-rotate-handle::after {
+  position: absolute;
+  top: 13px;
+  left: 5px;
+  width: 1px;
+  height: 14px;
+  background: #6557c8;
+  content: "";
+}
+.object-rotate-handle:active {
+  cursor: grabbing;
+}
 .hosted-object:focus-visible {
   border-radius: 6px;
   outline: 3px solid rgba(42, 143, 137, 0.35);

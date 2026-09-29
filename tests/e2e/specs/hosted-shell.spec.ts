@@ -154,3 +154,111 @@ test("selects, duplicates, moves, undoes and persists board objects", async ({
     4,
   );
 });
+
+test("resizes, rotates, locks and unlocks one object through canonical history", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Display name").fill("Transform QA");
+  await page
+    .getByLabel("Work email")
+    .fill(`transform-${Date.now()}@example.com`);
+  await page.getByRole("button", { name: "Continue to workspace" }).click();
+
+  const canvas = page.getByLabel("Canvas");
+  const canvasBox = await canvas.boundingBox();
+  if (!canvasBox) throw new Error("Canvas is not visible");
+  await page.getByRole("button", { name: "Sticky note (S)" }).click();
+  await page.mouse.click(canvasBox.x + 480, canvasBox.y + 330);
+  await page.getByRole("button", { name: "Close inspector" }).click();
+
+  const object = page.getByRole("button", { name: "sticky object" });
+  const originalWidth = await object.evaluate((element) =>
+    Number.parseFloat((element as HTMLElement).style.width),
+  );
+  const resize = page.getByRole("button", { name: "Resize selected object" });
+  const resizeBox = await resize.boundingBox();
+  if (!resizeBox) throw new Error("Resize handle is not visible");
+  await page.mouse.move(
+    resizeBox.x + resizeBox.width / 2,
+    resizeBox.y + resizeBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(resizeBox.x + 70, resizeBox.y + 45, { steps: 6 });
+  await page.mouse.up();
+  await expect
+    .poll(() =>
+      object.evaluate((element) =>
+        Number.parseFloat((element as HTMLElement).style.width),
+      ),
+    )
+    .toBeGreaterThan(originalWidth + 40);
+
+  const rotate = page.getByRole("button", { name: "Rotate selected object" });
+  const rotateBox = await rotate.boundingBox();
+  const objectBox = await object.boundingBox();
+  if (!rotateBox || !objectBox)
+    throw new Error("Rotation handle is not visible");
+  await page.mouse.move(
+    rotateBox.x + rotateBox.width / 2,
+    rotateBox.y + rotateBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(objectBox.x + objectBox.width + 35, objectBox.y + 45, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(() =>
+      object.evaluate((element) => (element as HTMLElement).style.transform),
+    )
+    .not.toContain("rotate(0deg)");
+
+  await page.getByRole("button", { name: "Lock", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "sticky object, locked" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Resize selected object" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Delete", exact: true }),
+  ).toBeDisabled();
+
+  await page.getByRole("button", { name: /Undo/ }).click();
+  await expect(
+    page.getByRole("button", { name: "sticky object" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Redo/ }).click();
+  await expect(
+    page.getByRole("button", { name: "sticky object, locked" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Unlock", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "sticky object" }),
+  ).toBeVisible();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible({
+    timeout: 10_000,
+  });
+
+  const persistedWidth = await object.evaluate((element) =>
+    Number.parseFloat((element as HTMLElement).style.width),
+  );
+  const persistedTransform = await object.evaluate(
+    (element) => (element as HTMLElement).style.transform,
+  );
+  await page.reload();
+  const reloaded = page.getByRole("button", { name: "sticky object" });
+  await expect
+    .poll(() =>
+      reloaded.evaluate((element) =>
+        Number.parseFloat((element as HTMLElement).style.width),
+      ),
+    )
+    .toBe(persistedWidth);
+  await expect
+    .poll(() =>
+      reloaded.evaluate((element) => (element as HTMLElement).style.transform),
+    )
+    .toBe(persistedTransform);
+});

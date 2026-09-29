@@ -82,6 +82,87 @@ test("locked objects reject mutation until explicitly unlocked", () => {
   assert.equal(unlocked.objects.note?.locked, false);
 });
 
+test("resize and rotate are atomic, normalized, and immutable", () => {
+  const board = createEmptyBoard({ boardId: "board-transform" });
+  board.objects.note = sticky("note", 10, 20);
+  board.rootOrder = ["note"];
+
+  const resized = applyBoardCommand(
+    board,
+    {
+      type: "object.resize",
+      objectId: "note",
+      size: { width: 240, height: 160 },
+    },
+    context,
+  );
+  const rotated = applyBoardCommand(
+    resized,
+    { type: "object.rotate", objectId: "note", rotation: -15 },
+    context,
+  );
+
+  assert.deepEqual(board.objects.note?.size, { width: 100, height: 80 });
+  assert.deepEqual(resized.objects.note?.size, { width: 240, height: 160 });
+  assert.equal(resized.objects.note?.transform.rotation, 0);
+  assert.equal(rotated.objects.note?.transform.rotation, 345);
+  assert.equal(rotated.generation, 2);
+  assertBoardDocument(rotated);
+});
+
+test("invalid transforms and locked resize or rotation are rejected", () => {
+  const board = createEmptyBoard({ boardId: "board-invalid-transform" });
+  board.objects.note = { ...sticky("note"), locked: true };
+  board.rootOrder = ["note"];
+
+  for (const command of [
+    {
+      type: "object.resize",
+      objectId: "note",
+      size: { width: 120, height: 90 },
+    },
+    { type: "object.rotate", objectId: "note", rotation: 45 },
+  ] as const) {
+    assert.throws(
+      () => applyBoardCommand(board, command, context),
+      (error) =>
+        error instanceof CommandError && error.code === "object.locked",
+    );
+  }
+
+  const unlocked = {
+    ...board,
+    objects: { ...board.objects, note: sticky("note") },
+  };
+  assert.throws(
+    () =>
+      applyBoardCommand(
+        unlocked,
+        {
+          type: "object.resize",
+          objectId: "note",
+          size: { width: Number.NaN, height: 80 },
+        },
+        context,
+      ),
+    (error) => error instanceof CommandError && error.code === "size.invalid",
+  );
+  assert.throws(
+    () =>
+      applyBoardCommand(
+        unlocked,
+        {
+          type: "object.rotate",
+          objectId: "note",
+          rotation: Number.POSITIVE_INFINITY,
+        },
+        context,
+      ),
+    (error) =>
+      error instanceof CommandError && error.code === "transform.invalid",
+  );
+});
+
 test("removing a bound object preserves the connector at the former anchor", () => {
   const board = createEmptyBoard({ boardId: "board-1" });
   board.objects.note = sticky("note", 20, 30);
