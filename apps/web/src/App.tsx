@@ -77,15 +77,32 @@ function errorMessage(error: unknown): string {
     : "The request could not be completed.";
 }
 
-function ProductBrand({ inverse = false }: { inverse?: boolean }) {
+function ProductBrand({
+  inverse = false,
+  boardShell = false,
+}: {
+  inverse?: boolean;
+  boardShell?: boolean;
+}) {
   return (
-    <div className={`product-brand${inverse ? " product-brand-inverse" : ""}`}>
+    <div
+      className={`product-brand${inverse ? " product-brand-inverse" : ""}${boardShell ? " product-brand-board" : ""}`}
+    >
       <img
         src={inverse ? "/getitech-logo-dark.png" : "/getitech-logo-light.png"}
         alt="GETITECH"
       />
-      <span className="product-brand-divider" aria-hidden="true" />
-      <span className="product-brand-name">HuddleCanvas</span>
+      {!boardShell ? (
+        <span className="product-brand-divider" aria-hidden="true" />
+      ) : null}
+      <span className="product-brand-name">
+        Huddle<span className="product-brand-accent">Canvas</span>
+      </span>
+      {boardShell ? (
+        <span className="product-brand-tagline">
+          Collaborate · Decide · Deliver
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -283,6 +300,9 @@ export default function App() {
   const [versions, setVersions] = useState<BoardVersion[]>([]);
   const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [boardsOpen, setBoardsOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const sidebarButton = useRef<HTMLButtonElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [error, setError] = useState("");
@@ -340,6 +360,21 @@ export default function App() {
   useEffect(() => {
     if (selectedObjectId) setInspectorOpen(true);
   }, [selectedObjectId]);
+
+  function closeMobileSidebar() {
+    setMobileSidebarOpen(false);
+    requestAnimationFrame(() => sidebarButton.current?.focus());
+  }
+
+  useEffect(() => {
+    function exitShellMode(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      // Let CanvasPreview also handle Escape for its current tool/selection.
+      if (mobileSidebarOpen) closeMobileSidebar();
+    }
+    window.addEventListener("keydown", exitShellMode);
+    return () => window.removeEventListener("keydown", exitShellMode);
+  }, [mobileSidebarOpen]);
 
   function showBoard(board: BoardRecord | null) {
     boardRef.current = board;
@@ -1146,9 +1181,23 @@ export default function App() {
   }[saveState];
 
   return (
-    <div className="app-shell hosted-shell">
-      <aside className="sidebar">
-        <ProductBrand />
+    <div
+      className={`app-shell hosted-shell${mobileSidebarOpen ? " mobile-sidebar-open" : ""}`}
+    >
+      <aside
+        className="sidebar"
+        id="workspace-sidebar"
+        aria-label="Workspace sidebar"
+      >
+        <button
+          type="button"
+          className="icon-button sidebar-close"
+          aria-label="Close sidebar"
+          onClick={closeMobileSidebar}
+        >
+          ×
+        </button>
+        <ProductBrand boardShell />
         <div className="workspace-switcher">
           <span className="workspace-avatar">
             {workspaceAccess.workspace.name[0]?.toUpperCase()}
@@ -1158,25 +1207,40 @@ export default function App() {
             {workspaceAccess.workspace.name}
           </span>
         </div>
-        <nav aria-label="Workspace">
-          <button className="nav-item active" aria-current="page">
+        {canEdit ? (
+          <div className="sidebar-actions">
+            <button
+              type="button"
+              className="primary-action new-board-action"
+              aria-label="Create board"
+              onClick={() => {
+                setBoardsOpen(true);
+                void addBoard();
+              }}
+            >
+              <Icon name="plus" size={16} /> New board
+            </button>
+          </div>
+        ) : null}
+        <nav className="sidebar-section" aria-label="Workspace">
+          <button
+            className="nav-item active"
+            type="button"
+            aria-expanded={boardsOpen}
+            aria-controls="workspace-board-list"
+            onClick={() => setBoardsOpen((open) => !open)}
+          >
             <Icon name="board" /> Boards
             <span className="nav-count">{boards.length}</span>
+            <Icon name={boardsOpen ? "chevron-down" : "chevron"} size={14} />
           </button>
         </nav>
-        <div className="sidebar-section">
-          <span>Your boards</span>
-          {canEdit ? (
-            <button
-              className="icon-button"
-              onClick={() => void addBoard()}
-              aria-label="Create board"
-            >
-              <Icon name="plus" size={16} />
-            </button>
-          ) : null}
-        </div>
-        <div className="board-list">
+        <div
+          className="board-list"
+          id="workspace-board-list"
+          hidden={!boardsOpen}
+          style={boardsOpen ? undefined : { display: "none" }}
+        >
           {boards.map((board, index) => (
             <button
               key={board.id}
@@ -1185,6 +1249,7 @@ export default function App() {
                   ? "board-row selected"
                   : "board-row"
               }
+              aria-current={board.id === activeBoard?.id ? "page" : undefined}
               onClick={() => void openBoard(board.id)}
             >
               <span
@@ -1213,6 +1278,7 @@ export default function App() {
             </button>
           </div>
         ) : null}
+        <small className="sidebar-ownership">HuddleCanvas · by GETITECH</small>
         <div className="sidebar-footer">
           <span className="avatar">{initials(identity.displayName)}</span>
           <div>
@@ -1231,6 +1297,17 @@ export default function App() {
 
       <main className="workspace">
         <header className="topbar">
+          <button
+            ref={sidebarButton}
+            type="button"
+            className="icon-button sidebar-toggle"
+            aria-label="Toggle sidebar"
+            aria-expanded={mobileSidebarOpen}
+            aria-controls="workspace-sidebar"
+            onClick={() => setMobileSidebarOpen((open) => !open)}
+          >
+            <Icon name="board" />
+          </button>
           <div className="title-block hosted-title">
             <div>
               <span>Boards</span>
@@ -1289,6 +1366,8 @@ export default function App() {
               }
               type="button"
               aria-pressed={inspectorOpen}
+              aria-expanded={inspectorOpen}
+              aria-controls="board-inspector"
               onClick={() => setInspectorOpen((open) => !open)}
             >
               <Icon name="clock" size={15} /> History
@@ -1522,6 +1601,7 @@ export default function App() {
 
           <aside
             className="inspector"
+            id="board-inspector"
             aria-label="Selection and board history"
             hidden={!inspectorOpen}
           >
