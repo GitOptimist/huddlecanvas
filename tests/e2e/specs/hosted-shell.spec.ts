@@ -18,14 +18,15 @@ test("uses, persists, and recovers the hosted canvas", async ({ page }) => {
   await expect(title).toHaveValue("My first hosted board");
   await expect(page.getByRole("button", { name: "Pen (P)" })).toBeVisible();
 
-  const canvas = page.getByLabel("Canvas");
+  const canvas = page.getByLabel("Canvas", { exact: true });
+  await expect(canvas).toBeVisible();
   const canvasBox = await canvas.boundingBox();
   if (!canvasBox) throw new Error("Canvas is not visible");
 
   await page.getByRole("button", { name: "Sticky note (S)" }).click();
   await page.mouse.click(canvasBox.x + 430, canvasBox.y + 310);
   await page
-    .getByLabel("Note")
+    .getByRole("textbox", { name: "Note", exact: true })
     .fill("Persistent customer insight about our users");
   await page.getByRole("button", { name: "Close inspector" }).click();
   await title.fill("M3.5 canvas proof");
@@ -34,6 +35,7 @@ test("uses, persists, and recovers the hosted canvas", async ({ page }) => {
     timeout: 10_000,
   });
 
+  await page.getByRole("button", { name: "Clear selection" }).click();
   await page.getByRole("button", { name: "Pen (P)" }).click();
   await page.mouse.move(canvasBox.x + 520, canvasBox.y + 390);
   await page.mouse.down();
@@ -55,7 +57,7 @@ test("uses, persists, and recovers the hosted canvas", async ({ page }) => {
   await page.getByRole("button", { name: "Text (T)" }).click();
   await page.mouse.click(canvasBox.x + 770, canvasBox.y + 440);
   await page
-    .getByLabel("Text", { exact: true })
+    .getByRole("textbox", { name: "Text", exact: true })
     .fill("A decision worth keeping");
   await expect(page.getByText("Saved", { exact: true })).toBeVisible({
     timeout: 10_000,
@@ -102,7 +104,8 @@ test("selects, duplicates, moves, undoes and persists board objects", async ({
   await page.getByLabel("Work email").fill(`parity-${Date.now()}@example.com`);
   await page.getByRole("button", { name: "Continue to workspace" }).click();
 
-  const canvas = page.getByLabel("Canvas");
+  const canvas = page.getByLabel("Canvas", { exact: true });
+  await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
   if (!box) throw new Error("Canvas is not visible");
   await page.getByRole("button", { name: "Sticky note (S)" }).click();
@@ -144,7 +147,7 @@ test("selects, duplicates, moves, undoes and persists board objects", async ({
   await expect(page.getByRole("button", { name: "sticky object" })).toHaveCount(
     4,
   );
-  await page.getByRole("button", { name: "sticky object" }).first().click();
+  await page.getByRole("button", { name: "sticky object" }).last().click();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByRole("button", { name: "sticky object" })).toHaveCount(
     3,
@@ -165,7 +168,8 @@ test("resizes, rotates, locks and unlocks one object through canonical history",
     .fill(`transform-${Date.now()}@example.com`);
   await page.getByRole("button", { name: "Continue to workspace" }).click();
 
-  const canvas = page.getByLabel("Canvas");
+  const canvas = page.getByLabel("Canvas", { exact: true });
+  await expect(canvas).toBeVisible();
   const canvasBox = await canvas.boundingBox();
   if (!canvasBox) throw new Error("Canvas is not visible");
   await page.getByRole("button", { name: "Sticky note (S)" }).click();
@@ -202,7 +206,10 @@ test("resizes, rotates, locks and unlocks one object through canonical history",
     .toBeGreaterThan(original.height + 20);
   const resized = await geometry();
 
-  const rotate = page.getByRole("button", { name: "Rotate selected object" });
+  const rotate = page.getByRole("button", {
+    name: "Rotate selected object",
+    exact: true,
+  });
   const rotateBox = await rotate.boundingBox();
   const objectBox = await object.boundingBox();
   if (!rotateBox || !objectBox)
