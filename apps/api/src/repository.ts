@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { validateClassicWorkspace, type ClassicSnapshot } from "./classic-workspace.ts";
 
 import {
   assertBoardDocument,
@@ -54,6 +55,7 @@ export interface BoardVersionRecord {
 }
 
 interface RepositoryState {
+  classicWorkspaces?: Array<ClassicSnapshot & { userId: string }>;
   schemaVersion: typeof STORE_SCHEMA_VERSION;
   users: UserRecord[];
   workspaces: WorkspaceRecord[];
@@ -75,6 +77,8 @@ export interface BoardAccess {
 export type PersistenceKind = "memory" | "file" | "postgresql";
 
 export interface BoardRepositoryPort {
+  getClassicWorkspace(userId: string): Promise<ClassicSnapshot>;
+  saveClassicWorkspace(userId: string, expectedRevision: number, workspace: Record<string, unknown>): Promise<ClassicSnapshot>;
   readonly persistenceKind: PersistenceKind;
   initialize(): Promise<void>;
   close(): Promise<void>;
@@ -256,6 +260,26 @@ export class BoardRepository implements BoardRepositoryPort {
   }
 
   async close(): Promise<void> {}
+
+  async getClassicWorkspace(userId: string): Promise<ClassicSnapshot> {
+    await this.initialize();
+    const found = this.state.classicWorkspaces?.find((entry) => entry.userId === userId);
+    return found ? structuredClone({ revision: found.revision, workspace: found.workspace }) : { revision: 0, workspace: null };
+  }
+
+  async saveClassicWorkspace(userId: string, expectedRevision: number, workspace: Record<string, unknown>): Promise<ClassicSnapshot> {
+    const validated = validateClassicWorkspace(workspace);
+    return this.mutate(() => {
+      if (!this.state.users.some((user) => user.id === userId)) throw new RepositoryNotFoundError("Account not found.");
+      const entries = this.state.classicWorkspaces ??= [];
+      const found = entries.find((entry) => entry.userId === userId);
+      const revision = found?.revision ?? 0;
+      if (revision !== expectedRevision) throw new RepositoryConflictError(revision);
+      const next = { userId, revision: revision + 1, workspace: validated };
+      if (found) Object.assign(found, next); else entries.push(next);
+      return { revision: next.revision, workspace: structuredClone(validated) };
+    });
+  }
 
   async initialize(): Promise<void> {
     if (this.initialized) return;

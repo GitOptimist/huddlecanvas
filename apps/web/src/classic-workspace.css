@@ -1,0 +1,66 @@
+.classic-shell {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #f7f8fc;
+}
+.classic-account {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e1e4ed;
+  font-size: 13px;
+}
+.classic-account strong {
+  color: #312e81;
+}
+.classic-account small {
+  font-weight: 400;
+  margin-left: 6px;
+}
+.classic-account [role="status"] {
+  color: #52605d;
+  flex: 1;
+}
+.classic-account button,
+.classic-error button {
+  border: 1px solid #d9dce7;
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: white;
+  cursor: pointer;
+}
+.classic-shell iframe {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+}
+.classic-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: #fff1de;
+  color: #743500;
+  padding: 10px 16px;
+}
+.classic-leaving {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #ffffffcc;
+}
+@media (max-width: 700px) {
+  .classic-account {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .classic-email {
+    display: none;
+  }
+}

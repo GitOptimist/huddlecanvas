@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ClassicWorkspace } from "./ClassicWorkspace";
 
 import {
   assessLegacyV8,
@@ -455,6 +456,7 @@ export default function App() {
           throw new Error("No workspace is available for this account.");
         setIdentity(session.identity);
         setWorkspaceAccess(access);
+        if (new URLSearchParams(window.location.search).get("editor") !== "alpha") return;
         const availableBoards = await refreshBoardList(access, sessionToken);
         if (cancelled) return;
         const first = availableBoards[0];
@@ -1170,6 +1172,15 @@ export default function App() {
         <strong>Opening your workspace…</strong>
       </main>
     );
+  }
+
+  if (new URLSearchParams(window.location.search).get("editor") !== "alpha") {
+    return <ClassicWorkspace
+      key={identity.userId}
+      token={token || undefined}
+      identity={identity}
+      onSignOut={signOut}
+    />;
   }
 
   const saveLabel = {

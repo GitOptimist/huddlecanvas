@@ -37,6 +37,7 @@ import {
 } from "./repository.ts";
 
 export const DEVELOPMENT_SECRET = "huddlecanvas-local-development-only";
+import { CLASSIC_MAX_BYTES, ClassicValidationError, validateClassicWorkspace } from "./classic-workspace.ts";
 
 interface BuildServerOptions {
   repository?: BoardRepositoryPort;
@@ -262,7 +263,15 @@ export function buildServer(options: BuildServerOptions = {}) {
 
   server.addHook("onReady", async () => repository.initialize());
   server.addHook("onClose", async () => repository.close());
-  server.addHook("onSend", async (_request, reply, payload) => {
+  server.addHook("onSend", async (request, reply, payload) => {
+    if (request.url.startsWith("/v1/")) reply.header("cache-control", "no-store");
+    if (request.url.split("?")[0] === "/v8-hosted.html") {
+      reply.header("x-content-type-options", "nosniff");
+      reply.header("referrer-policy", "no-referrer");
+      reply.header("x-frame-options", "SAMEORIGIN");
+      reply.header("content-security-policy", "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads allow-modals");
+      return payload;
+    }
     reply.header("x-content-type-options", "nosniff");
     reply.header("referrer-policy", "same-origin");
     reply.header("x-frame-options", "DENY");
@@ -320,12 +329,13 @@ export function buildServer(options: BuildServerOptions = {}) {
       return reply.code(409).send({ error: "identity_conflict", message });
     }
     if (
-      error instanceof RequestValidationError ||
+      error instanceof RequestValidationError || error instanceof ClassicValidationError ||
       message.startsWith("Invalid HuddleCanvas board document") ||
       message.startsWith("Board document id")
     ) {
       return reply.code(400).send({ error: "invalid_request", message });
     }
+    if ((error as { statusCode?: number }).statusCode === 413) return reply.code(413).send({ error: "too_large", message: "Workspace exceeds the 10 MB cloud save limit. Export a backup and reduce embedded images or checkpoints." });
     server.log.error(error);
     return reply.code(500).send({
       error: "internal_error",
@@ -517,6 +527,18 @@ export function buildServer(options: BuildServerOptions = {}) {
     );
     const workspaces = await repository.listWorkspacesForUser(identity.userId);
     return { identity, workspaces };
+  });
+
+  server.get("/v1/classic-workspace", async (request) => {
+    const identity = await identityFor(request, identityVerifier, signer, sessionCookieName, repository);
+    return repository.getClassicWorkspace(identity.userId);
+  });
+  server.put<{ Body: { expectedRevision?: unknown; workspace?: unknown } }>("/v1/classic-workspace", { bodyLimit: CLASSIC_MAX_BYTES + 1024 }, async (request) => {
+    const identity = await identityFor(request, identityVerifier, signer, sessionCookieName, repository);
+    const revision = request.body?.expectedRevision;
+    if (!Number.isSafeInteger(revision) || (revision as number) < 0) throw new RequestValidationError("A valid expectedRevision is required.");
+    const workspace = validateClassicWorkspace(request.body?.workspace);
+    return repository.saveClassicWorkspace(identity.userId, revision as number, workspace);
   });
 
   server.get("/v1/workspaces", async (request) => {

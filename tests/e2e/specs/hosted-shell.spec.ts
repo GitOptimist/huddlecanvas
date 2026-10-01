@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("uses, persists, and recovers the hosted canvas", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?editor=alpha");
   await expect(
     page.getByRole("heading", {
       name: "Turn workshop ideas into action.",
@@ -99,7 +99,7 @@ test("uses, persists, and recovers the hosted canvas", async ({ page }) => {
 test("selects, duplicates, moves, undoes and persists board objects", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?editor=alpha");
   await page.getByLabel("Display name").fill("Parity QA");
   await page.getByLabel("Work email").fill(`parity-${Date.now()}@example.com`);
   await page.getByRole("button", { name: "Continue to workspace" }).click();
@@ -161,7 +161,7 @@ test("selects, duplicates, moves, undoes and persists board objects", async ({
 test("resizes, rotates, locks and unlocks one object through canonical history", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?editor=alpha");
   await page.getByLabel("Display name").fill("Transform QA");
   await page
     .getByLabel("Work email")
