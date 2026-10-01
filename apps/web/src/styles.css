@@ -2032,3 +2032,631 @@ nav {
     bottom: 10px;
   }
 }
+
+/* Hosted v8 shell. Keep these overrides scoped so the sign-in page retains
+   its own typography, branding and responsive layout. The canvas and inspector
+   share a containing block; opening History must never resize the world. */
+.hosted-shell {
+  --brand: #6256d9;
+  --brand2: #312e81;
+  --ink: #161a22;
+  --muted: #6b7280;
+  --line: #e7e9ee;
+  --panel: #fff;
+  --soft: #f7f8fb;
+  --shadow: 0 16px 44px rgba(25, 30, 45, 0.14);
+  position: relative;
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--soft);
+  color: var(--ink);
+  font-family:
+    "Avenir Next",
+    "Segoe UI Variable",
+    "Segoe UI",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+.hosted-shell .sidebar {
+  z-index: 20;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 14px;
+  background: #fbfbfd;
+  border-right: 1px solid var(--line);
+}
+.hosted-shell .sidebar > :not(.board-list) {
+  flex-shrink: 0;
+}
+.hosted-shell .product-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 4px 10px;
+}
+.hosted-shell .product-brand img {
+  width: 108px;
+  height: 24px;
+  object-position: left center;
+}
+.hosted-shell .product-brand-divider {
+  display: none;
+}
+.hosted-shell .product-brand-name {
+  font-family:
+    "Avenir Next", "Segoe UI Variable Display", "Segoe UI", system-ui,
+    sans-serif;
+  font-size: 27px;
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  color: #171923;
+}
+.hosted-shell .product-brand-accent {
+  color: var(--brand);
+}
+.hosted-shell .product-brand-tagline {
+  margin: 0 4px 11px;
+  color: #8b92a0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.hosted-shell .sidebar-toggle,
+.hosted-shell .sidebar-close {
+  display: none;
+}
+.hosted-shell .sidebar-actions {
+  margin: 0 0 8px;
+}
+.hosted-shell .new-board-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 39px;
+  margin: 0;
+  padding: 0 11px;
+  border-radius: 10px;
+  background: var(--brand);
+  font-size: 13px;
+}
+.hosted-shell .sidebar-ownership {
+  color: var(--muted);
+  font-size: 10px;
+  padding: 4px;
+}
+.hosted-shell [hidden] {
+  display: none !important;
+}
+.hosted-shell .workspace-switcher {
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  margin: 8px 0 12px;
+  padding: 8px;
+  border-color: var(--line);
+  background: #fff;
+}
+.hosted-shell .workspace-switcher > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.hosted-shell .workspace-avatar {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
+}
+.hosted-shell .nav-item {
+  height: 39px;
+  gap: 7px;
+  padding: 0 11px;
+  border-radius: 10px;
+  color: #343a46;
+  font-size: 13px;
+}
+.hosted-shell .nav-item.active {
+  color: #1d4ed8;
+  background: #eaf0ff;
+}
+.hosted-shell .nav-count {
+  background: #eef0f5;
+  color: #747b86;
+}
+.hosted-shell .sidebar-section {
+  margin: 8px 4px 6px;
+  color: #8a909c;
+  font-weight: 800;
+}
+.hosted-shell .board-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 4px;
+  overflow-x: hidden;
+  padding-right: 3px;
+  scrollbar-width: thin;
+  scrollbar-color: #cfd3dc transparent;
+}
+.hosted-shell .board-row {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 38px;
+  gap: 6px;
+  padding: 9px;
+  border-radius: 9px;
+  color: #343a46;
+  font-size: 13px;
+  font-weight: 690;
+}
+.hosted-shell .board-row:hover {
+  background: #f0f2f6;
+}
+.hosted-shell .board-row.selected {
+  color: #1d4ed8;
+  background: #eaf0ff;
+}
+.hosted-shell .board-row small {
+  color: #9aa0aa;
+  font-size: 10px;
+}
+.hosted-shell .sidebar-footer {
+  margin-top: 8px;
+  padding: 10px 4px 0;
+  border-color: var(--line);
+}
+.hosted-shell .v8-import-entry {
+  margin: 8px 0;
+}
+.hosted-shell .v8-import-entry button {
+  min-height: 39px;
+  border-color: var(--line);
+  border-radius: 10px;
+  color: #343a46;
+}
+.hosted-shell .icon-button:hover {
+  border-color: #c8c3f3;
+  background: #f7f5ff;
+  color: var(--brand);
+}
+.hosted-shell .workspace {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.hosted-shell .topbar {
+  position: absolute;
+  z-index: 15;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  height: 52px;
+  min-height: 52px;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 24px rgba(25, 30, 45, 0.09);
+  backdrop-filter: blur(10px);
+}
+.hosted-shell .hosted-title {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+/* The editable title is the v8 header; the duplicate breadcrumb adds a row. */
+.hosted-shell .hosted-title > div {
+  display: none;
+}
+.hosted-shell .hosted-title input {
+  width: 100%;
+  min-width: 0;
+  max-width: 310px;
+  height: 36px;
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 760;
+  letter-spacing: normal;
+}
+.hosted-shell .hosted-title input:hover,
+.hosted-shell .hosted-title input:focus {
+  background: #fafafa;
+  border-color: var(--line);
+}
+.hosted-shell .edit-actions {
+  flex: 0 0 auto;
+  gap: 2px;
+  margin: 0;
+}
+.hosted-shell .edit-actions button,
+.hosted-shell .activity-toggle {
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 10px;
+  color: #3e4450;
+  background: #fff;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.hosted-shell .topbar-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 7px;
+}
+.hosted-shell .activity-toggle.active {
+  color: #5b21b6;
+  background: #f4efff;
+}
+.hosted-shell .content-grid,
+.hosted-shell .content-grid.inspector-closed {
+  position: absolute;
+  inset: 0;
+  display: block;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.hosted-shell .canvas-panel {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.hosted-shell .hosted-canvas-stage {
+  background: #fff;
+}
+.hosted-shell .canvas-world {
+  border: 0;
+  box-shadow: none;
+}
+.hosted-shell .canvas-toolbar {
+  z-index: 16;
+  top: 74px;
+  left: 12px;
+  gap: 5px;
+  max-height: calc(100% - 154px);
+  padding: 7px;
+  border-color: var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  transform: none;
+}
+.hosted-shell .tool-button {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  color: #4b5563;
+}
+.hosted-shell .tool-button svg {
+  width: 19px;
+  height: 19px;
+}
+.hosted-shell .tool-button:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+.hosted-shell .tool-button.active,
+.hosted-shell .tool-button.active:hover:not(:disabled) {
+  color: #244bd3;
+  background: #e9efff;
+  box-shadow: inset 0 0 0 1px #c7d6ff;
+}
+.hosted-shell .shape-options {
+  width: min(244px, calc(100vw - 92px));
+  padding: 10px;
+  border-color: var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(24, 30, 44, 0.18);
+}
+.hosted-shell .shape-options button {
+  min-height: 36px;
+  border-radius: 9px;
+}
+.hosted-shell .ink-palette {
+  z-index: 16;
+  left: 64px;
+  bottom: 16px;
+  max-width: calc(100% - 280px);
+  gap: 7px;
+  padding: 10px 7px;
+  overflow-x: auto;
+  border-color: var(--line);
+  border-radius: 13px;
+  box-shadow: var(--shadow);
+}
+.hosted-shell .ink-palette span {
+  flex-shrink: 0;
+}
+.hosted-shell .ink-palette button {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  box-shadow: 0 0 0 1px #cbd1db;
+}
+.hosted-shell .ink-palette button.selected {
+  box-shadow: 0 0 0 3px #b8c9ff;
+}
+.hosted-shell .zoom-control {
+  z-index: 18;
+  right: 16px;
+  bottom: 16px;
+  gap: 3px;
+  padding: 5px;
+  border-color: #dedfe8;
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(31, 35, 48, 0.13);
+}
+.hosted-shell .zoom-control button {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #fff;
+  color: #4e5562;
+  font-size: 19px;
+  font-weight: 750;
+}
+.hosted-shell .zoom-control .zoom-value {
+  width: 52px;
+  color: #555c68;
+  font-size: 12px;
+}
+.hosted-shell .zoom-control button:hover {
+  background: #f5f4ff;
+  color: var(--brand);
+}
+.hosted-shell .canvas-mode-hint {
+  left: 50%;
+  bottom: 76px;
+  max-width: calc(100% - 160px);
+  min-height: 0;
+  padding: 7px 10px;
+  transform: translateX(-50%);
+  border-color: #edf0f3;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #858c98;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 400;
+}
+.hosted-shell .selection-actions {
+  z-index: 17;
+  top: 74px;
+  left: 80px;
+  max-width: calc(100% - 96px);
+  overflow-x: auto;
+  gap: 5px;
+  padding: 7px 9px;
+  border-color: #cfd5ff;
+  border-radius: 13px;
+  box-shadow: 0 14px 38px rgba(75, 69, 180, 0.16);
+}
+.hosted-shell .selection-actions > * {
+  flex-shrink: 0;
+}
+.hosted-shell .inspector:not([hidden]) {
+  position: absolute;
+  z-index: 30;
+  display: block;
+  top: 74px;
+  right: 10px;
+  bottom: 10px;
+  width: min(390px, calc(100% - 90px));
+  padding: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgba(20, 25, 40, 0.2);
+}
+.hosted-shell .inspector-heading {
+  gap: 8px;
+  min-height: 40px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.hosted-shell .inspector-heading h2 {
+  font-size: 15px;
+}
+.hosted-shell .inspector-icon {
+  color: var(--brand);
+  background: #f4efff;
+}
+.hosted-shell .inspector-close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: #f3f4f6;
+}
+.hosted-shell .selection-summary {
+  border-color: var(--line);
+  background: #fafbfe;
+}
+.hosted-shell .workspace-alert {
+  position: relative;
+  z-index: 31;
+  top: 68px;
+  margin: 6px 12px;
+  background: #fffbef;
+  border: 1px solid #eadfbf;
+  color: #775f26;
+}
+.hosted-shell :is(button, input, textarea, select):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+.hosted-shell .sticky-card {
+  padding: 12px;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  color: #3f3a25;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.hosted-shell .action-card,
+.hosted-shell .checklist-card {
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 9px 22px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 1150px) {
+  .hosted-shell .revision-label {
+    display: none;
+  }
+  .hosted-shell .topbar-actions {
+    gap: 4px;
+  }
+}
+@media (max-width: 950px) {
+  .hosted-shell .role-badge {
+    display: none;
+  }
+  .hosted-shell .ink-palette {
+    bottom: 76px;
+    max-width: calc(100% - 80px);
+  }
+  .hosted-shell .canvas-mode-hint {
+    bottom: 132px;
+  }
+}
+@media (max-width: 850px) {
+  .hosted-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hosted-shell .sidebar {
+    display: none;
+  }
+  .hosted-shell .sidebar-toggle {
+    display: grid;
+    flex: 0 0 32px;
+  }
+  .hosted-shell.mobile-sidebar-open .sidebar {
+    display: flex;
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: min(280px, 100%);
+    z-index: 35;
+    box-shadow: var(--shadow);
+  }
+  .hosted-shell .sidebar-close {
+    display: grid;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+  .hosted-shell .canvas-toolbar {
+    top: 74px;
+  }
+}
+@media (max-width: 540px) {
+  .hosted-shell .topbar {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    height: auto;
+    min-height: 52px;
+    flex-wrap: wrap;
+  }
+  .hosted-shell .hosted-title {
+    flex-basis: calc(100% - 150px);
+  }
+  .hosted-shell .topbar-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .hosted-shell .topbar-actions .role-badge {
+    display: inline-flex;
+  }
+  .hosted-shell .canvas-toolbar {
+    top: 116px;
+    max-height: calc(100% - 196px);
+  }
+  .hosted-shell .tool-button {
+    width: 36px;
+    height: 36px;
+  }
+  .hosted-shell .selection-actions {
+    top: 116px;
+    left: 74px;
+    max-width: calc(100% - 86px);
+  }
+  .hosted-shell .inspector:not([hidden]) {
+    top: 116px;
+    width: calc(100% - 84px);
+  }
+  .hosted-shell .workspace-alert {
+    top: 110px;
+  }
+  .hosted-shell .ink-palette {
+    left: 12px;
+    max-width: calc(100% - 24px);
+  }
+  .hosted-shell .canvas-mode-hint {
+    display: none;
+  }
+  .hosted-shell .canvas-empty-prompt {
+    left: 84px;
+    max-width: calc(100vw - 108px);
+  }
+}
+/* Keep every tool reachable in short landscape windows, without clipping the
+   shape popover to a scrolling rail. */
+@media (max-height: 600px) and (min-width: 541px) {
+  .hosted-shell .canvas-toolbar {
+    gap: 2px;
+    padding: 5px;
+  }
+  .hosted-shell .tool-button {
+    width: 34px;
+    height: 30px;
+  }
+}
+@media (max-height: 480px) {
+  .hosted-shell .canvas-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, 30px);
+    gap: 2px;
+    padding: 5px;
+  }
+  .hosted-shell .tool-button {
+    width: 30px;
+    height: 30px;
+  }
+  .hosted-shell .selection-actions {
+    left: 88px;
+    max-width: calc(100% - 100px);
+  }
+  .hosted-shell .canvas-mode-hint {
+    display: none;
+  }
+}
