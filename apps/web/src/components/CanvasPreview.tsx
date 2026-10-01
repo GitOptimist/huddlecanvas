@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -44,6 +45,8 @@ interface CanvasPreviewProps {
   selectedObjectIds?: string[];
   onSelectionChange?: (objectIds: string[]) => void;
   onObjectsMove?: (objectIds: string[], dx: number, dy: number) => void;
+  onObjectResize?: (objectId: string, width: number, height: number) => void;
+  onObjectRotate?: (objectId: string, rotation: number) => void;
   onAddSticky?: (point: CanvasPoint) => void;
   onAddText?: (point: CanvasPoint) => void;
   onAddShape?: (point: CanvasPoint, shape: ShapeKind) => void;
@@ -87,6 +90,25 @@ type Gesture =
       pointerId: number;
       points: StrokePoint[];
       style: StrokeStyle;
+    }
+  | {
+      kind: "resize";
+      objectId: string;
+      pointerId: number;
+      clientX: number;
+      clientY: number;
+      width: number;
+      height: number;
+      rotation: number;
+    }
+  | {
+      kind: "rotate";
+      objectId: string;
+      pointerId: number;
+      centerX: number;
+      centerY: number;
+      startAngle: number;
+      rotation: number;
     }
   | { kind: "erase"; pointerId: number };
 
@@ -332,6 +354,8 @@ export function CanvasPreview({
   selectedObjectIds = [],
   onSelectionChange,
   onObjectsMove,
+  onObjectResize,
+  onObjectRotate,
   onAddSticky,
   onAddText,
   onAddShape,
@@ -340,6 +364,12 @@ export function CanvasPreview({
 }: CanvasPreviewProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const gesture = useRef<Gesture | null>(null);
+  const transformPreviewRef = useRef<{
+    objectId: string;
+    width?: number;
+    height?: number;
+    rotation?: number;
+  } | null>(null);
   const erasedDuringGesture = useRef(new Set<string>());
   const [tool, setTool] = useState<CanvasTool>("select");
   const [shape, setShape] = useState<ShapeKind>("rectangle");
@@ -358,6 +388,12 @@ export function CanvasPreview({
   const [draftStroke, setDraftStroke] = useState<{
     points: StrokePoint[];
     style: StrokeStyle;
+  } | null>(null);
+  const [transformPreview, setTransformPreview] = useState<{
+    objectId: string;
+    width?: number;
+    height?: number;
+    rotation?: number;
   } | null>(null);
   const [viewport, setViewport] = useState<ViewportState>({
     zoom: 1,
@@ -609,6 +645,37 @@ export function CanvasPreview({
       });
       return;
     }
+    if (current.kind === "resize") {
+      const dx = (event.clientX - current.clientX) / viewport.zoom;
+      const dy = (event.clientY - current.clientY) / viewport.zoom;
+      const radians = (current.rotation * Math.PI) / 180;
+      const localX = dx * Math.cos(radians) + dy * Math.sin(radians);
+      const localY = -dx * Math.sin(radians) + dy * Math.cos(radians);
+      const preview = {
+        objectId: current.objectId,
+        width: Math.max(32, Math.round(current.width + localX)),
+        height: Math.max(32, Math.round(current.height + localY)),
+      };
+      transformPreviewRef.current = preview;
+      setTransformPreview(preview);
+      return;
+    }
+    if (current.kind === "rotate") {
+      const angle =
+        (Math.atan2(
+          event.clientY - current.centerY,
+          event.clientX - current.centerX,
+        ) *
+          180) /
+        Math.PI;
+      const rotation = Math.round(
+        current.rotation + angle - current.startAngle,
+      );
+      const preview = { objectId: current.objectId, rotation };
+      transformPreviewRef.current = preview;
+      setTransformPreview(preview);
+      return;
+    }
     if (current.kind === "lasso") {
       current.end = canvasPoint(event.clientX, event.clientY);
       setLassoPreview({ start: current.start, end: current.end });
@@ -653,6 +720,20 @@ export function CanvasPreview({
       onObjectsMove?.(current.objectIds, current.dx, current.dy);
       setDragPreview(null);
     }
+    const completedTransform = transformPreviewRef.current;
+    if (current.kind === "resize" && completedTransform) {
+      onObjectResize?.(
+        current.objectId,
+        completedTransform.width ?? current.width,
+        completedTransform.height ?? current.height,
+      );
+    }
+    if (current.kind === "rotate" && completedTransform) {
+      onObjectRotate?.(
+        current.objectId,
+        completedTransform.rotation ?? current.rotation,
+      );
+    }
     if (current.kind === "lasso") {
       const end = canvasPoint(event.clientX, event.clientY);
       const rect = normalizeRect(current.start, end);
@@ -669,6 +750,8 @@ export function CanvasPreview({
     erasedDuringGesture.current.clear();
     setErasedPreview([]);
     setDraftStroke(null);
+    setTransformPreview(null);
+    transformPreviewRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -682,6 +765,8 @@ export function CanvasPreview({
     setDraftStroke(null);
     setDragPreview(null);
     setLassoPreview(null);
+    setTransformPreview(null);
+    transformPreviewRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -716,6 +801,57 @@ export function CanvasPreview({
       clientY: event.clientY,
       dx: 0,
       dy: 0,
+    };
+  }
+
+  function resizePointerDown(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    object: BoardObject,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!onObjectResize || object.locked || event.button !== 0) return;
+    viewportRef.current?.setPointerCapture(event.pointerId);
+    gesture.current = {
+      kind: "resize",
+      objectId: object.id,
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      width: object.size.width,
+      height: object.size.height,
+      rotation: object.transform.rotation,
+    };
+  }
+
+  function rotatePointerDown(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    object: BoardObject,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!onObjectRotate || object.locked || event.button !== 0) return;
+    const bounds = viewportRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const centerX =
+      bounds.left +
+      viewport.panX +
+      (object.transform.x + object.size.width / 2) * viewport.zoom;
+    const centerY =
+      bounds.top +
+      viewport.panY +
+      (object.transform.y + object.size.height / 2) * viewport.zoom;
+    viewportRef.current?.setPointerCapture(event.pointerId);
+    gesture.current = {
+      kind: "rotate",
+      objectId: object.id,
+      pointerId: event.pointerId,
+      centerX,
+      centerY,
+      startAngle:
+        (Math.atan2(event.clientY - centerY, event.clientX - centerX) * 180) /
+        Math.PI,
+      rotation: object.transform.rotation,
     };
   }
 
@@ -854,32 +990,68 @@ export function CanvasPreview({
           const rendered = renderObject(object);
           if (!rendered || object.hidden || erasedPreview.includes(object.id))
             return null;
-          return (
-            <div
-              key={object.id}
-              className={`canvas-object hosted-object${selectedObjectIds.includes(object.id) ? " selected" : ""}${effectiveTool === "select" && onObjectsMove && !object.locked ? " movable" : ""}`}
-              style={{
-                ...objectStyle(object),
-                ...(dragPreview?.ids.includes(object.id)
-                  ? {
-                      left: object.transform.x + dragPreview.dx,
-                      top: object.transform.y + dragPreview.dy,
-                    }
-                  : {}),
-              }}
-              tabIndex={effectiveTool === "select" ? 0 : -1}
-              role="button"
-              aria-label={`${object.type} object${object.locked ? ", locked" : ""}`}
-              onPointerDown={(event) => objectPointerDown(event, object)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelectionChange?.([object.id]);
+          const previewStyle =
+            transformPreview?.objectId === object.id
+              ? {
+                  width: transformPreview.width ?? object.size.width,
+                  height: transformPreview.height ?? object.size.height,
+                  transform: `rotate(${transformPreview.rotation ?? object.transform.rotation}deg) scale(${object.transform.scaleX}, ${object.transform.scaleY})`,
                 }
-              }}
-            >
-              {rendered}
-            </div>
+              : {};
+          return (
+            <Fragment key={object.id}>
+              <div
+                className={`canvas-object hosted-object${selectedObjectIds.includes(object.id) ? " selected" : ""}${effectiveTool === "select" && onObjectsMove && !object.locked ? " movable" : ""}`}
+                style={{
+                  ...objectStyle(object),
+                  ...previewStyle,
+                  ...(dragPreview?.ids.includes(object.id)
+                    ? {
+                        left: object.transform.x + dragPreview.dx,
+                        top: object.transform.y + dragPreview.dy,
+                      }
+                    : {}),
+                }}
+                tabIndex={effectiveTool === "select" ? 0 : -1}
+                role="button"
+                aria-label={`${object.type} object${object.locked ? ", locked" : ""}`}
+                onPointerDown={(event) => objectPointerDown(event, object)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectionChange?.([object.id]);
+                  }
+                }}
+              >
+                {rendered}
+              </div>
+              {canEdit &&
+              selectedObjectIds.length === 1 &&
+              selectedObjectIds[0] === object.id &&
+              !object.locked ? (
+                <div
+                  className="object-transform-controls"
+                  role="group"
+                  aria-label="Pointer transform controls"
+                  style={{ ...objectStyle(object), ...previewStyle }}
+                >
+                  <button
+                    type="button"
+                    className="object-transform-handle object-rotate-handle"
+                    aria-label="Rotate selected object"
+                    title="Rotate"
+                    onPointerDown={(event) => rotatePointerDown(event, object)}
+                  />
+                  <button
+                    type="button"
+                    className="object-transform-handle object-resize-handle"
+                    aria-label="Resize selected object"
+                    title="Resize"
+                    onPointerDown={(event) => resizePointerDown(event, object)}
+                  />
+                </div>
+              ) : null}
+            </Fragment>
           );
         })}
         {lassoPreview ? (
