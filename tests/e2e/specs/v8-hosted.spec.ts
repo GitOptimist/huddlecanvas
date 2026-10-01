@@ -35,9 +35,7 @@ test("saves the working v8 interface to one hosted account and isolates another"
   );
 
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Welcome to HuddleCanvas" }),
-  ).toBeVisible();
+  await expect(page.getByLabel("Work email")).toBeVisible();
   await page.getByLabel("Display name").fill("Second Account QA");
   await page
     .getByLabel("Work email")

@@ -1118,7 +1118,6 @@ export default function App() {
     showBoard(null);
     dirtyRef.current = false;
     resetEditHistory(null);
-    window.location.assign("/");
   }
 
   useEffect(() => {
