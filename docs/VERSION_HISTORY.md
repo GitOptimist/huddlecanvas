@@ -66,3 +66,10 @@ Historical files are for traceability and regression/reference. New feature work
 - Added a separate Render static-preview Blueprint and a byte-identical v8 build from the unchanged root `index.html`. Preview browser storage is independent of GitHub Pages and Hosted Alpha.
 - Added a guarded, authenticated single-board `.flowboard` importer that creates a new canonical hosted board and initial revision only for supported simple board content. Unsupported or lossy files are rejected with field-level reasons and leave the hosted repository unchanged.
 - The hosted UI is still not the full v8 app. See `docs/V8_HOSTED_BRIDGE.md` for safe manual migration and remaining tool/media/feature work.
+
+### Authenticated v8 workspace release
+
+- Made the preserved v8 interface the default board experience after Hosted Alpha sign-in while retaining the existing OIDC session, API service, PostgreSQL database, and sign-out flow.
+- Replaced v8 browser-local persistence in the hosted build with an authenticated full-workspace endpoint, per-account isolation, atomic revisions, explicit conflicts, save-before-sign-out, and downloadable failure backups.
+- Kept the canonical Hosted Alpha editor and its existing boards available under `/?editor=alpha`; no existing canonical board is converted or deleted.
+- Added API coverage for validation, file recovery, PostgreSQL recovery and conflicts, plus browser coverage for v8 save/reload and account isolation. The root v8 `index.html` remains unchanged.

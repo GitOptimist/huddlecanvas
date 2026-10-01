@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("keeps the v8 shell usable on desktop and mobile", async ({
   page,
 }, testInfo) => {
-  await page.goto("/");
+  await page.goto("/?editor=alpha");
   await page.getByLabel("Display name").fill("Layout QA");
   await page.getByLabel("Work email").fill(`layout-${Date.now()}@example.com`);
   await page.getByRole("button", { name: "Continue to workspace" }).click();

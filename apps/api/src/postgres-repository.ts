@@ -4,6 +4,7 @@ import {
 } from "@huddlecanvas/board-schema";
 import type { Role } from "@huddlecanvas/authz";
 import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
+import { validateClassicWorkspace, type ClassicSnapshot } from "./classic-workspace.ts";
 
 import {
   RepositoryConflictError,
@@ -74,6 +75,13 @@ CREATE TABLE IF NOT EXISTS huddlecanvas_board_versions (
 
 CREATE INDEX IF NOT EXISTS huddlecanvas_versions_board_revision
   ON huddlecanvas_board_versions (board_id, revision DESC);
+
+CREATE TABLE IF NOT EXISTS huddlecanvas_classic_workspaces (
+  user_id text PRIMARY KEY REFERENCES huddlecanvas_users(id) ON DELETE CASCADE,
+  revision integer NOT NULL CHECK (revision > 0),
+  workspace jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT NOW()
+);
 
 COMMIT;
 `;
@@ -222,6 +230,23 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
 
   async close(): Promise<void> {
     if (this.options.closePool !== false) await this.pool.end();
+  }
+
+  async getClassicWorkspace(userId: string): Promise<ClassicSnapshot> {
+    await this.initialize();
+    const result = await this.pool.query("SELECT revision, workspace FROM huddlecanvas_classic_workspaces WHERE user_id = $1", [userId]);
+    const row = result.rows[0];
+    return row ? { revision: Number(row.revision), workspace: row.workspace } : { revision: 0, workspace: null };
+  }
+
+  async saveClassicWorkspace(userId: string, expectedRevision: number, workspace: Record<string, unknown>): Promise<ClassicSnapshot> {
+    await this.initialize();
+    const validated = validateClassicWorkspace(workspace);
+    const result = expectedRevision === 0
+      ? await this.pool.query("INSERT INTO huddlecanvas_classic_workspaces (user_id, revision, workspace) VALUES ($1, 1, $2::jsonb) ON CONFLICT (user_id) DO NOTHING RETURNING revision, workspace", [userId, JSON.stringify(validated)])
+      : await this.pool.query("UPDATE huddlecanvas_classic_workspaces SET revision = revision + 1, workspace = $3::jsonb, updated_at = NOW() WHERE user_id = $1 AND revision = $2 RETURNING revision, workspace", [userId, expectedRevision, JSON.stringify(validated)]);
+    if (!result.rows[0]) throw new RepositoryConflictError((await this.getClassicWorkspace(userId)).revision);
+    return { revision: Number(result.rows[0].revision), workspace: result.rows[0].workspace };
   }
 
   private async transaction<T>(

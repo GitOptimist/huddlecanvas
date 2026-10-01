@@ -123,6 +123,21 @@ export async function getAuthConfig() {
   return request<{ mode: AuthMode }>("/v1/auth/config");
 }
 
+export interface ClassicSnapshot {
+  revision: number;
+  workspace: Record<string, unknown> | null;
+}
+
+export function getClassicWorkspace(token?: string) {
+  return request<ClassicSnapshot>("/v1/classic-workspace", { token });
+}
+
+export function saveClassicWorkspace(token: string | undefined, expectedRevision: number, workspace: Record<string, unknown>) {
+  return request<ClassicSnapshot>("/v1/classic-workspace", {
+    token, method: "PUT", body: JSON.stringify({ expectedRevision, workspace }),
+  });
+}
+
 export async function signOutSession() {
   return request<void>("/v1/auth/logout", { method: "POST" });
 }

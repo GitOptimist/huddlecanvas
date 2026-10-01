@@ -25,3 +25,5 @@ test-results/
 # Temporary exports
 *.tmp
 *.bak
+assets/v8-hosted.html
+assets/v8-hosted.js
