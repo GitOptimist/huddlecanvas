@@ -16,6 +16,7 @@ test("saves the working v8 interface to one hosted account and isolates another"
 
   await title.fill("Hosted v8 proof");
   await frame.locator("#stickyBtn").click();
+  await frame.locator('[data-sticky-color="#fff2a8"]').click();
   await frame.locator("#drawCanvas").click({ position: { x: 520, y: 360 } });
   await frame
     .locator(".sticky textarea")
