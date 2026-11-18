@@ -45,6 +45,7 @@ test("hosted build preserves v8 capabilities while exposing only truthful hosted
   assert.match(bridge, /Canvas workspace/);
   assert.match(bridge, /MutationObserver\(enhanceCanvasItems\)/);
   assert.match(bridge, /baseToggleModal/);
+  assert.match(bridge, /cancel\.onclick=\(\)=>close\('cancel'\)/);
   assert.doesNotMatch(
     bridge,
     /improveHostedAccessibility\(\);\s*\n\s*\(\(\)=>/,

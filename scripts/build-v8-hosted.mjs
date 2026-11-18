@@ -105,8 +105,9 @@ function hostedDialog(message,value,kind){return new Promise(resolve=>{
  const dialog=document.createElement('dialog');dialog.style.cssText='max-width:440px;border:1px solid #ddd;border-radius:14px;padding:24px;color:#222;background:white';
  const form=document.createElement('form');form.method='dialog';const label=document.createElement('label');label.textContent=message;label.style.display='block';form.append(label);
  const input=document.createElement('input');if(kind==='prompt'){input.value=value||'';input.style.cssText='display:block;width:100%;margin:16px 0';label.append(input)}
- if(kind!=='alert'){const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.value='cancel';cancel.type='submit';form.append(cancel)}
- const ok=document.createElement('button');ok.textContent='OK';ok.value='ok';ok.type='submit';form.append(ok);dialog.append(form);document.body.append(dialog);
+ const close=value=>{if(dialog.open)dialog.close(value)};
+ if(kind!=='alert'){const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.value='cancel';cancel.type='button';cancel.onclick=()=>close('cancel');form.append(cancel)}
+ const ok=document.createElement('button');ok.textContent='OK';ok.value='ok';ok.type='submit';form.addEventListener('submit',event=>{event.preventDefault();close('ok')});form.append(ok);dialog.append(form);document.body.append(dialog);
  dialog.addEventListener('close',()=>{const accepted=dialog.returnValue==='ok';dialog.remove();resolve(kind==='prompt'?(accepted?input.value:null):accepted)},{once:true});
  dialog.showModal();if(kind==='prompt')input.focus();else ok.focus();
 })}

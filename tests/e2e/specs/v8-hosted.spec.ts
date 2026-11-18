@@ -62,6 +62,7 @@ test("saves the working v8 interface to one hosted account and isolates another"
   await expect(frame.locator("dialog")).toBeVisible();
   await expect(frame.locator("dialog")).toContainText("Reset this board?");
   await frame.getByRole("button", { name: "Cancel" }).click();
+  await expect(frame.locator("dialog")).toBeHidden();
 
   await frame.locator("#exportBtn").click();
   await expect(frame.locator("#exportModal")).toHaveAttribute("role", "dialog");
