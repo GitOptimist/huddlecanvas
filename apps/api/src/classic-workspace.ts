@@ -1,4 +1,18 @@
 export const CLASSIC_MAX_BYTES = 10 * 1024 * 1024;
+const CLASSIC_MAX_DEPTH = 40;
+const CLASSIC_MAX_NODES = 1_000_000;
+const CLASSIC_MAX_STRING_LENGTH = CLASSIC_MAX_BYTES;
+const CLASSIC_MAX_CANVAS_VALUE = 1_000_000;
+const CANVAS_NUMBER_KEYS = new Set([
+  "x",
+  "y",
+  "w",
+  "h",
+  "width",
+  "height",
+  "scale",
+  "rotation",
+]);
 export interface ClassicSnapshot {
   revision: number;
   workspace: Record<string, unknown> | null;
@@ -9,7 +23,7 @@ export class ClassicValidationError extends Error {}
 export function validateClassicWorkspace(
   value: unknown,
 ): Record<string, unknown> {
-  const fail = () => {
+  const fail = (): never => {
     throw new ClassicValidationError(
       "Invalid v8 workspace. Export a backup and check the board data.",
     );
@@ -48,17 +62,47 @@ export function validateClassicWorkspace(
     !ids.has(value.currentBoardId)
   )
     return fail();
-  const visit = (v: unknown, depth: number) => {
-    if (depth > 40) fail();
-    if (v && typeof v === "object") {
-      for (const [key, child] of Object.entries(v)) {
-        if (["__proto__", "constructor", "prototype"].includes(key)) fail();
-        visit(child, depth + 1);
-      }
+  let nodes = 0;
+  let arrayItems = 0;
+  const seen = new WeakSet<object>();
+  const visit = (v: unknown, depth: number, parentKey = "") => {
+    nodes += 1;
+    if (nodes > CLASSIC_MAX_NODES || depth > CLASSIC_MAX_DEPTH) fail();
+    if (typeof v === "string") {
+      if (v.length > CLASSIC_MAX_STRING_LENGTH) fail();
+      return;
+    }
+    if (typeof v === "number") {
+      if (!Number.isFinite(v) || !Number.isSafeInteger(Math.trunc(v))) fail();
+      if (
+        CANVAS_NUMBER_KEYS.has(parentKey) &&
+        Math.abs(v) > CLASSIC_MAX_CANVAS_VALUE
+      )
+        fail();
+      return;
+    }
+    if (v === null || typeof v === "boolean") return;
+    if (!v || typeof v !== "object") return fail();
+    if (seen.has(v)) fail();
+    seen.add(v);
+    if (Array.isArray(v)) {
+      arrayItems += v.length;
+      if (arrayItems > CLASSIC_MAX_NODES) fail();
+      for (const child of v) visit(child, depth + 1);
+      return;
+    }
+    for (const [key, child] of Object.entries(v)) {
+      if (["__proto__", "constructor", "prototype"].includes(key)) fail();
+      visit(child, depth + 1, key);
     }
   };
   visit(value, 0);
-  if (Buffer.byteLength(JSON.stringify(value)) > CLASSIC_MAX_BYTES)
+  let encoded: string;
+  try {
+    encoded = JSON.stringify(value);
+  } catch {
     return fail();
+  }
+  if (Buffer.byteLength(encoded) > CLASSIC_MAX_BYTES) return fail();
   return structuredClone(value);
 }

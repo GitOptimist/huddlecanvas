@@ -69,6 +69,23 @@ test("PostgreSQL repository supports identity, boards, conflicts, and recovery",
     const changed = structuredClone(board.document);
     changed.title = "Saved on PostgreSQL";
     changed.generation += 1;
+    changed.objects["sticky-one"] = {
+      id: "sticky-one",
+      type: "sticky",
+      parentId: null,
+      orderKey: "a0",
+      transform: { x: 40, y: 50, rotation: 0, scaleX: 1, scaleY: 1 },
+      size: { width: 220, height: 150 },
+      locked: false,
+      hidden: false,
+      createdAt: "2000-01-01T00:00:00.000Z",
+      createdBy: "attacker-controlled",
+      updatedAt: "2000-01-01T00:00:00.000Z",
+      updatedBy: "attacker-controlled",
+      text: "Server-owned audit fields",
+      color: "#fff2a8",
+    };
+    changed.rootOrder.push("sticky-one");
     const saved = await repository.saveBoard({
       boardId: board.id,
       expectedRevision: 1,
@@ -78,6 +95,8 @@ test("PostgreSQL repository supports identity, boards, conflicts, and recovery",
     });
     assert.equal(saved.revision, 2);
     assert.equal(saved.title, "Saved on PostgreSQL");
+    assert.equal(saved.document.objects["sticky-one"]?.createdBy, user.id);
+    assert.equal(saved.document.objects["sticky-one"]?.updatedBy, user.id);
 
     await assert.rejects(
       repository.saveBoard({
@@ -107,6 +126,55 @@ test("PostgreSQL repository supports identity, boards, conflicts, and recovery",
     const reopened = await repository.boardAccess(board.id, user.id);
     assert.equal(reopened.board.revision, 3);
     assert.equal(reopened.role, "owner");
+  } finally {
+    await repository.close();
+  }
+});
+
+test("concurrent identity provisioning never rebinds one email to another subject", async () => {
+  const { repository } = repositoryFixture();
+  try {
+    await repository.initialize();
+    const attempts = await Promise.allSettled([
+      repository.upsertUser({
+        externalSubject: "https://identity.example.test|concurrent-one",
+        email: "concurrent@example.com",
+        displayName: "Concurrent One",
+      }),
+      repository.upsertUser({
+        externalSubject: "https://identity.example.test|concurrent-two",
+        email: "concurrent@example.com",
+        displayName: "Concurrent Two",
+      }),
+    ]);
+    const accepted = attempts.filter(
+      (
+        attempt,
+      ): attempt is PromiseFulfilledResult<
+        Awaited<ReturnType<typeof repository.upsertUser>>
+      > => attempt.status === "fulfilled",
+    );
+    const rejected = attempts.filter(
+      (attempt): attempt is PromiseRejectedResult =>
+        attempt.status === "rejected",
+    );
+    assert.equal(accepted.length, 1);
+    assert.equal(rejected.length, 1);
+    assert.ok(
+      rejected[0]!.reason instanceof RepositoryIdentityConflictError,
+      rejected[0]!.reason instanceof Error
+        ? rejected[0]!.reason.stack
+        : String(rejected[0]!.reason),
+    );
+
+    const winner = accepted[0]!.value;
+    assert.ok(winner.externalSubject);
+    const repeated = await repository.upsertUser({
+      externalSubject: winner.externalSubject,
+      email: "concurrent@example.com",
+      displayName: "Established Identity",
+    });
+    assert.equal(repeated.id, winner.id);
   } finally {
     await repository.close();
   }

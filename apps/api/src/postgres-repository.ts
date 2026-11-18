@@ -3,14 +3,24 @@ import {
   type BoardDocument,
 } from "@huddlecanvas/board-schema";
 import type { Role } from "@huddlecanvas/authz";
-import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
-import { validateClassicWorkspace, type ClassicSnapshot } from "./classic-workspace.ts";
+import type {
+  Pool,
+  PoolClient,
+  QueryConfig,
+  QueryResult,
+  QueryResultRow,
+} from "pg";
+import {
+  validateClassicWorkspace,
+  type ClassicSnapshot,
+} from "./classic-workspace.ts";
 
 import {
   RepositoryConflictError,
   RepositoryIdentityConflictError,
   RepositoryNotFoundError,
   initialBoardDocument,
+  withServerOwnedObjectAudit,
   type BoardAccess,
   type BoardRecord,
   type BoardRepositoryPort,
@@ -228,25 +238,56 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
     this.initialized = true;
   }
 
+  async checkHealth(): Promise<void> {
+    await this.initialize();
+    const probe: QueryConfig & { query_timeout: number } = {
+      text: "SELECT 1",
+      query_timeout: 2_000,
+    };
+    await this.pool.query(probe);
+  }
+
   async close(): Promise<void> {
     if (this.options.closePool !== false) await this.pool.end();
   }
 
   async getClassicWorkspace(userId: string): Promise<ClassicSnapshot> {
     await this.initialize();
-    const result = await this.pool.query("SELECT revision, workspace FROM huddlecanvas_classic_workspaces WHERE user_id = $1", [userId]);
+    const result = await this.pool.query(
+      "SELECT revision, workspace FROM huddlecanvas_classic_workspaces WHERE user_id = $1",
+      [userId],
+    );
     const row = result.rows[0];
-    return row ? { revision: Number(row.revision), workspace: row.workspace } : { revision: 0, workspace: null };
+    return row
+      ? { revision: Number(row.revision), workspace: row.workspace }
+      : { revision: 0, workspace: null };
   }
 
-  async saveClassicWorkspace(userId: string, expectedRevision: number, workspace: Record<string, unknown>): Promise<ClassicSnapshot> {
+  async saveClassicWorkspace(
+    userId: string,
+    expectedRevision: number,
+    workspace: Record<string, unknown>,
+  ): Promise<ClassicSnapshot> {
     await this.initialize();
     const validated = validateClassicWorkspace(workspace);
-    const result = expectedRevision === 0
-      ? await this.pool.query("INSERT INTO huddlecanvas_classic_workspaces (user_id, revision, workspace) VALUES ($1, 1, $2::jsonb) ON CONFLICT (user_id) DO NOTHING RETURNING revision, workspace", [userId, JSON.stringify(validated)])
-      : await this.pool.query("UPDATE huddlecanvas_classic_workspaces SET revision = revision + 1, workspace = $3::jsonb, updated_at = NOW() WHERE user_id = $1 AND revision = $2 RETURNING revision, workspace", [userId, expectedRevision, JSON.stringify(validated)]);
-    if (!result.rows[0]) throw new RepositoryConflictError((await this.getClassicWorkspace(userId)).revision);
-    return { revision: Number(result.rows[0].revision), workspace: result.rows[0].workspace };
+    const result =
+      expectedRevision === 0
+        ? await this.pool.query(
+            "INSERT INTO huddlecanvas_classic_workspaces (user_id, revision, workspace) VALUES ($1, 1, $2::jsonb) ON CONFLICT (user_id) DO NOTHING RETURNING revision, workspace",
+            [userId, JSON.stringify(validated)],
+          )
+        : await this.pool.query(
+            "UPDATE huddlecanvas_classic_workspaces SET revision = revision + 1, workspace = $3::jsonb, updated_at = NOW() WHERE user_id = $1 AND revision = $2 RETURNING revision, workspace",
+            [userId, expectedRevision, JSON.stringify(validated)],
+          );
+    if (!result.rows[0])
+      throw new RepositoryConflictError(
+        (await this.getClassicWorkspace(userId)).revision,
+      );
+    return {
+      revision: Number(result.rows[0].revision),
+      workspace: result.rows[0].workspace,
+    };
   }
 
   private async transaction<T>(
@@ -277,6 +318,19 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
     const externalSubject = input.externalSubject?.trim() || null;
     try {
       return await this.transaction(async (client) => {
+        const created = await client.query<UserRow>(
+          `INSERT INTO huddlecanvas_users
+          (id, email, display_name, external_subject, created_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT DO NOTHING
+         RETURNING ${USER_COLUMNS}`,
+          [id("usr"), email, displayName, externalSubject],
+        );
+        if (created.rows[0]) return userRecord(created.rows[0]);
+
+        // A conflicting insert may have been committed after this transaction
+        // started. Re-read and lock the winning identity before deciding
+        // whether the supplied email/subject pair may update it.
         const existing = await client.query<UserRow>(
           `SELECT ${USER_COLUMNS}
            FROM huddlecanvas_users
@@ -297,29 +351,19 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
           throw new RepositoryIdentityConflictError();
         }
         const row = subjectMatch ?? emailMatch;
-        if (row) {
-          const updated = await client.query<UserRow>(
-            `UPDATE huddlecanvas_users
+        if (!row) throw new RepositoryIdentityConflictError();
+        const updated = await client.query<UserRow>(
+          `UPDATE huddlecanvas_users
               SET email = $2,
                   display_name = $3,
-                  external_subject = COALESCE($4, external_subject)
+                  external_subject = COALESCE(external_subject, $4)
             WHERE id = $1
+              AND ($4::text IS NULL OR external_subject IS NULL OR external_subject = $4)
         RETURNING ${USER_COLUMNS}`,
-            [row.id, email, displayName, externalSubject],
-          );
-          return userRecord(updated.rows[0]!);
-        }
-        const created = await client.query<UserRow>(
-          `INSERT INTO huddlecanvas_users
-          (id, email, display_name, external_subject, created_at)
-         VALUES ($1, $2, $3, $4, NOW())
-         ON CONFLICT (email) DO UPDATE
-         SET display_name = EXCLUDED.display_name,
-             external_subject = COALESCE(EXCLUDED.external_subject, huddlecanvas_users.external_subject)
-         RETURNING ${USER_COLUMNS}`,
-          [id("usr"), email, displayName, externalSubject],
+          [row.id, email, displayName, externalSubject],
         );
-        return userRecord(created.rows[0]!);
+        if (!updated.rows[0]) throw new RepositoryIdentityConflictError();
+        return userRecord(updated.rows[0]);
       });
     } catch (error) {
       if ((error as { code?: string }).code === "23505") {
@@ -521,6 +565,12 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
       if (Number(current.revision) !== input.expectedRevision) {
         throw new RepositoryConflictError(Number(current.revision));
       }
+      const secured = withServerOwnedObjectAudit({
+        document: validated,
+        current: document(current.document),
+        actorId: input.actorId,
+        timestamp: new Date().toISOString(),
+      });
       const revision = Number(current.revision) + 1;
       const updated = await client.query<BoardRow>(
         `UPDATE huddlecanvas_boards
@@ -533,8 +583,8 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
           RETURNING ${BOARD_COLUMNS}`,
         [
           input.boardId,
-          validated.title,
-          JSON.stringify(validated),
+          secured.title,
+          JSON.stringify(secured),
           revision,
           input.actorId,
         ],
@@ -547,7 +597,7 @@ export class PostgresBoardRepository implements BoardRepositoryPort {
           id("ver"),
           input.boardId,
           revision,
-          JSON.stringify(validated),
+          JSON.stringify(secured),
           input.actorId,
           input.reason.trim() || "Autosave",
         ],

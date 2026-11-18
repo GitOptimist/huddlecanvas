@@ -1,11 +1,13 @@
 # HuddleCanvas by GETITECH — Product & Project Tracker
 
 **Tagline:** Collaborate · Decide · Deliver  
-**Version:** v8 Research Build + M3.1 Hosted Foundation
+**Version:** v8 Research Build + M3.5.1 Hosted Alpha
 
-**Date:** 10 September 2026
+**Date:** 22 October 2026
 
-**Status:** Product prototype preserved / hosted foundation in progress
+**Updated:** 18 November 2026
+
+**Status:** Authenticated single-account Hosted Alpha / collaboration foundation next
 
 > **Working-name note:** “HuddleCanvas” is a provisional product name. Complete formal trademark, domain and marketplace clearance before public launch.
 
@@ -32,6 +34,11 @@ HuddleCanvas is a visual collaboration workspace designed to move teams from ope
 3. **Execution follows collaboration.** Decisions should become actions, owners and due dates.
 4. **AI acts on the canvas.** AI should organize selected objects, generate quizzes/diagrams, extract actions and create follow-ups — not only chat.
 5. **Trust over novelty.** Autosave, recovery, export fidelity, privacy, accessibility and predictable controls are core product quality.
+6. **Discoverability without clutter.** Keep the primary canvas calm; expose advanced tools through search, contextual actions and progressive guidance.
+
+### Experience benchmark decision — 18 November 2026
+
+The reviewed Miro and Web Whiteboard screens establish useful interaction expectations: an unobstructed canvas, compact persistent tools, searchable discovery, contextual panels, clear save/share state and role-aware onboarding. HuddleCanvas will meet those conventions while deliberately avoiding forced promotional modals, feature-marketplace overload and generic always-open AI chat. The product advantage remains the connected outcome loop: brainstorm → decide → assign → follow up.
 
 ## 2. Current status
 
@@ -49,18 +56,21 @@ HuddleCanvas is a visual collaboration workspace designed to move teams from ope
 - AI local utilities, including quiz cards generated from selected board text.
 - PNG, PDF and editable `.flowboard` export; image paste/drag/import.
 
-### Not yet production/hosted
+### Not yet collaborative/production
 
-- Authentication, organizations/workspaces and cloud persistence.
-- Realtime CRDT collaboration, live cursors and presence.
-- Guest links and enforceable roles/permissions.
+- Realtime CRDT collaboration, live cursors, presence and reconnect recovery.
+- Invitations, guest links and end-to-end shared-board role workflows.
+- Server-authoritative participant voting, private contribution/reveal and facilitator follow.
+- First-class decisions, assignments to real members, My Actions and reminders.
+- Authoritative comments, @mentions and notifications.
 - Production AI model connection and secure AI gateway.
+- Object storage and explicit v8-to-canonical migration tooling.
 - Direct PDF page rendering/import.
 - Billing, subscriptions, entitlements and analytics.
 - Signed Windows/macOS packages with auto-update.
 - SSO, audit, retention and enterprise data controls.
 
-### M3.1 hosted foundation implemented
+### M3.1–M3.5.1 hosted foundation and trust hardening release candidate
 
 - Separate pnpm/Turborepo production workspace; v8 preserved at tag `prototype-v8` and root `index.html` unchanged.
 - Canonical schema v1 covering canvas, structured workflow, connector, frame and group objects.
@@ -70,12 +80,19 @@ HuddleCanvas is a visual collaboration workspace designed to move teams from ope
 - Capability-based Owner, Editor, Commenter, Viewer and Guest Session authorization policy.
 - Professional read-only React model proof plus candid API/realtime contracts.
 - Automated schema, importer, geometry, command and authorization tests; hosted CI and browser smoke-test scaffolding.
+- Hosted OIDC Authorization Code + PKCE sign-in and direct signup, verified email, secure HttpOnly session cookie and sign-out.
+- Per-account PostgreSQL-backed v8 workspace persistence with atomic revisions, conflicts, a 10 MiB limit and downloadable backups.
+- Server-generated request IDs, security headers, authentication/global rate limits, patched production dependencies and bounded v8 validation.
+- Race-safe external identity binding, PostgreSQL-backed readiness checks, server-owned canonical object audit metadata and bounded nested canonical validation.
+- Accurate hosted capability copy with unavailable generic AI/collaboration entry points removed from the visible interface.
+- Mobile workspace navigation, accessible hosted dialogs, keyboard-selectable/nudgeable canvas objects and consistent SVG treatment for key canvas controls.
+- CI gates for production audit, unit/API/bridge/type/build checks and Chromium/Firefox/WebKit workflows.
 
-This checkpoint does **not** claim authentication, cloud persistence, realtime transport, guest-link enforcement, or interactive production editing.
+This checkpoint does **not** claim realtime multi-user collaboration, invitations/guest links, participant-aware facilitation, a server-authoritative outcome loop or production AI.
 
 ### QA note
 
-Static JavaScript syntax and literal DOM-ID checks pass. Automated browser navigation was blocked in the build environment, so full interactive cross-browser regression remains a required manual/release QA step.
+Unit, API, OIDC, persistence, bridge, type and production-build checks are release gates. Cross-browser workflows run in CI, followed by the live staging checklist in `HOSTED_ALPHA_RELEASE_GATE.md`.
 
 ## 3. v8 interaction guide
 
@@ -99,9 +116,9 @@ Choose **Select**. Drag across empty canvas to select several objects, or Shift-
 
 Select one or more objects and choose **Arrange** in the contextual Selection bar. Align two or more objects, distribute three or more objects, change front/back layer order, or lock objects against editing and accidental destructive actions. Select a locked object and return to **Arrange** to unlock it; for a single text object, use **More actions → Unlock**.
 
-### AI quiz
+### Prototype quiz tool (portable research build only)
 
-Select relevant content → open **HuddleCanvas AI** → **Quiz from selected**. The portable build creates editable local quiz cards. Production AI can generate semantic questions, distractors, explanations, difficulty and scoring.
+The root portable research build can create editable quiz cards deterministically from selected board text. The hosted alpha does not expose a generic AI panel. Any future AI must be canvas-native, server-side, permission-aware, evaluated and accurately labeled.
 
 ## 4. Deployment & commercial model
 
@@ -144,15 +161,15 @@ Competitive benchmark checked 25 Aug 2026: Miro Free lists 3 editable boards, St
 
 ## 6. Milestones
 
-| Milestone                               | Scope                                                                               | Status                                 |
-| --------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------- |
-| M0 — Concept                            | v1–v3 MVP, faster ink, branding, multi-board concept                                | Complete                               |
-| M1 — Product shell                      | v4–v6 research UI, PDF export, paste/images, backgrounds, board management          | Complete                               |
-| M2 — Facilitation & object productivity | v7–v8 voting, checklists, grouping/lasso, shapes, frames, search, AI quiz prototype | Current / prototype                    |
-| M3 — Hosted Alpha                       | Auth, cloud storage, realtime CRDT/presence, guest links, roles, recovery           | In progress — M3.1 foundation complete |
-| M4 — Pro Beta                           | PDF import, production AI, billing, comments/notifications, desktop beta            | Planned                                |
-| M5 — Public Launch                      | Onboarding, analytics, pricing, support, security/accessibility/cross-browser QA    | Planned                                |
-| M6 — Enterprise                         | SSO/SCIM, audit/retention, BYO AI, admin/data controls                              | Planned                                |
+| Milestone                               | Scope                                                                               | Status                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| M0 — Concept                            | v1–v3 MVP, faster ink, branding, multi-board concept                                | Complete                                                        |
+| M1 — Product shell                      | v4–v6 research UI, PDF export, paste/images, backgrounds, board management          | Complete                                                        |
+| M2 — Facilitation & object productivity | v7–v8 voting, checklists, grouping/lasso, shapes, frames, search, AI quiz prototype | Current / prototype                                             |
+| M3 — Hosted Alpha                       | Auth, cloud storage, realtime CRDT/presence, guest links, roles, recovery           | In progress — M3.5.1 release candidate; M3.6 collaboration next |
+| M4 — Pro Beta                           | PDF import, production AI, billing, comments/notifications, desktop beta            | Planned                                                         |
+| M5 — Public Launch                      | Onboarding, analytics, pricing, support, security/accessibility/cross-browser QA    | Planned                                                         |
+| M6 — Enterprise                         | SSO/SCIM, audit/retention, BYO AI, admin/data controls                              | Planned                                                         |
 
 ### M3 definition of done
 
@@ -221,8 +238,9 @@ Two authenticated users can open the same cloud board, edit concurrently without
 
 **North star:** HuddleCanvas by GETITECH is a web-first visual collaboration product whose differentiation is moving teams from brainstorming to decisions and execution. Keep persistent UI simple; make facilitation, structured actions and canvas-native AI the product moat.
 
-**Current baseline:** v8 portable research build.  
-**Next milestone:** M3 Hosted Alpha.  
+**Current baseline:** authenticated, account-saved single-user v8 Hosted Alpha plus a canonical React editor foundation.
+
+**Next milestone:** M3.6 Canonical Collaborative Board Foundation.
 **Rule:** Do not fake hosted functionality in portable builds; label prototypes/dependencies clearly.  
 **Working name:** HuddleCanvas, pending clearance.  
 **Business direction:** Free → Pro → Team → Business/Enterprise; managed AI default, BYO AI enterprise; shared web/desktop account model.  

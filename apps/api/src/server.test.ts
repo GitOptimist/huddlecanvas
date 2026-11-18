@@ -452,7 +452,9 @@ test("browser OIDC creates a secure cookie session and enforces request origin",
       );
       assert.equal(input.returnTo, "/boards/one");
       return {
-        url: "https://identity.example.test/authorize?request=one",
+        url: input.screenHint
+          ? "https://identity.example.test/authorize?request=signup"
+          : "https://identity.example.test/authorize?request=one",
         transaction: {
           state: "state-1",
           nonce: "nonce-1",
@@ -499,6 +501,22 @@ test("browser OIDC creates a secure cookie session and enforces request origin",
   });
   assert.equal(config.statusCode, 200);
   assert.equal(config.json().mode, "oidc");
+  assert.ok(config.headers["x-request-id"]);
+  assert.equal(
+    config.headers["permissions-policy"],
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  );
+  assert.equal(config.headers["strict-transport-security"], "max-age=31536000");
+
+  const suppliedRequestId = await server.inject({
+    method: "GET",
+    url: "/api/v1/auth/config",
+    headers: { "x-request-id": "attacker-controlled" },
+  });
+  assert.notEqual(
+    suppliedRequestId.headers["x-request-id"],
+    "attacker-controlled",
+  );
 
   const login = await server.inject({
     method: "GET",
@@ -513,6 +531,17 @@ test("browser OIDC creates a secure cookie session and enforces request origin",
     login.headers["set-cookie"],
     "huddlecanvas_oidc_transaction",
   );
+
+  const signup = await server.inject({
+    method: "GET",
+    url: "/api/v1/auth/signup?returnTo=%2Fboards%2Fone",
+  });
+  assert.equal(signup.statusCode, 302, signup.body);
+  assert.equal(
+    signup.headers.location,
+    "https://identity.example.test/authorize?request=signup",
+  );
+  firstCookie(signup.headers["set-cookie"], "huddlecanvas_oidc_transaction");
 
   const callback = await server.inject({
     method: "GET",
@@ -579,6 +608,89 @@ test("browser OIDC creates a secure cookie session and enforces request origin",
   );
 
   await server.close();
+});
+
+test("hosted signup is rate limited without throttling health checks", async () => {
+  const now = Date.now();
+  const oidc: BrowserOidcClient = {
+    async createAuthorizationRequest(input) {
+      return {
+        url: "https://identity.example.test/authorize",
+        transaction: {
+          state: "state",
+          nonce: "nonce",
+          codeVerifier: "verifier",
+          returnTo: input.returnTo,
+          createdAt: now,
+        },
+      };
+    },
+    async completeAuthorization() {
+      throw new Error("Not used in this test");
+    },
+  };
+  const server = buildServer({
+    repository: new BoardRepository(new MemoryStorage()),
+    signer: new SessionSigner("rate-limit-session-secret-12345"),
+    transactionSecret: "rate-limit-transaction-secret-12345",
+    browserOidc: oidc,
+    publicOrigin: "https://staging.huddlecanvas.test",
+    secureCookies: true,
+    allowDevAuth: false,
+    logger: false,
+  });
+  await server.ready();
+  try {
+    for (let index = 0; index < 15; index += 1) {
+      const response = await server.inject({
+        method: "GET",
+        url: "/v1/auth/signup",
+        headers: {
+          "x-forwarded-for": `203.0.113.${index + 1}, 198.51.100.42`,
+        },
+      });
+      assert.equal(response.statusCode, 302, response.body);
+    }
+    const blocked = await server.inject({
+      method: "GET",
+      url: "/v1/auth/signup",
+      headers: {
+        "x-forwarded-for": "203.0.113.250, 198.51.100.42",
+      },
+    });
+    assert.equal(blocked.statusCode, 429, blocked.body);
+    assert.ok(blocked.headers["retry-after"]);
+
+    for (let index = 0; index < 20; index += 1) {
+      const health = await server.inject({ method: "GET", url: "/health" });
+      assert.equal(health.statusCode, 200, health.body);
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test("health reports unavailable when persistence cannot be reached", async () => {
+  const repository = new BoardRepository(new MemoryStorage());
+  repository.checkHealth = async () => {
+    throw new Error("Database unavailable");
+  };
+  const server = buildServer({
+    repository,
+    rateLimit: false,
+    logger: false,
+  });
+  try {
+    const response = await server.inject({ method: "GET", url: "/health" });
+    assert.equal(response.statusCode, 503, response.body);
+    assert.deepEqual(response.json(), {
+      status: "unavailable",
+      service: "huddlecanvas-api",
+      persistence: "memory",
+    });
+  } finally {
+    await server.close();
+  }
 });
 
 test("production server serves the web build and keeps unknown API routes as JSON", async () => {
