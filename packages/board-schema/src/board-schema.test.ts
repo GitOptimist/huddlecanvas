@@ -86,6 +86,36 @@ test("validation rejects dangling connector bindings", () => {
     assert(result.issues.some((issue) => issue.code === "dangling_binding"));
 });
 
+test("validation rejects unsafe nested stroke points and styles", () => {
+  const board = createEmptyBoard({ boardId: "board-unsafe-stroke" });
+  board.objects.stroke = {
+    id: "stroke",
+    type: "stroke",
+    parentId: null,
+    orderKey: "00000001",
+    transform: { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 },
+    size: { width: 100, height: 40 },
+    locked: false,
+    hidden: false,
+    createdAt: EPOCH_TIMESTAMP,
+    createdBy: "test-user",
+    updatedAt: EPOCH_TIMESTAMP,
+    updatedBy: "test-user",
+    points: [
+      { x: 0, y: 0 },
+      { x: Number.POSITIVE_INFINITY, y: 40 },
+    ],
+    style: { color: "#111827", width: -2, opacity: 4 },
+  };
+  board.rootOrder.push("stroke");
+  const result = validateBoardDocument(board);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert(result.issues.some((issue) => issue.code === "invalid_point"));
+    assert(result.issues.some((issue) => issue.code === "invalid_style"));
+  }
+});
+
 test("validation rejects cyclic group hierarchy", () => {
   const board = createEmptyBoard({ boardId: "board-cycle" });
   board.objects.a = {

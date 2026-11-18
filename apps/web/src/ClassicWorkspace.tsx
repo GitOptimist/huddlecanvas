@@ -165,8 +165,12 @@ export function ClassicWorkspace({
         </strong>
         <span role="status">{status}</span>
         <span className="classic-email">{identity.email}</span>
-        <button disabled={leaving} onClick={() => void leave("/?editor=alpha")}>
-          Earlier alpha boards
+        <button
+          disabled={leaving}
+          title="Open the separate canonical editor and its boards"
+          onClick={() => void leave("/?editor=alpha")}
+        >
+          Canonical alpha boards
         </button>
         <button disabled={leaving} onClick={() => void leave()}>
           Sign out

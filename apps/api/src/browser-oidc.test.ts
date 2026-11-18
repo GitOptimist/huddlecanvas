@@ -98,6 +98,17 @@ test("OIDC browser flow uses discovery, PKCE, state, nonce, and verified claims"
       authorizationUrl.searchParams.get("state"),
       authorization.transaction.state,
     );
+    assert.equal(authorizationUrl.searchParams.has("screen_hint"), false);
+
+    const signupAuthorization = await client.createAuthorizationRequest({
+      redirectUri,
+      returnTo: "/",
+      screenHint: "signup",
+    });
+    assert.equal(
+      new URL(signupAuthorization.url).searchParams.get("screen_hint"),
+      "signup",
+    );
 
     const identity = await client.completeAuthorization({
       callbackUrl: `${redirectUri}?code=single-use-code&state=${authorization.transaction.state}`,

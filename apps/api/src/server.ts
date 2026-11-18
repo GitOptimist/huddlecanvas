@@ -9,7 +9,9 @@ import {
   assessLegacyV8,
   assertBoardDocument,
 } from "@huddlecanvas/board-schema";
+import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
+import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 
@@ -37,7 +39,11 @@ import {
 } from "./repository.ts";
 
 export const DEVELOPMENT_SECRET = "huddlecanvas-local-development-only";
-import { CLASSIC_MAX_BYTES, ClassicValidationError, validateClassicWorkspace } from "./classic-workspace.ts";
+import {
+  CLASSIC_MAX_BYTES,
+  ClassicValidationError,
+  validateClassicWorkspace,
+} from "./classic-workspace.ts";
 
 interface BuildServerOptions {
   repository?: BoardRepositoryPort;
@@ -51,7 +57,10 @@ interface BuildServerOptions {
   secureCookies?: boolean;
   allowDevAuth?: boolean;
   logger?: boolean;
+  rateLimit?: boolean;
 }
+
+const BOARD_DOCUMENT_MAX_BYTES = 1024 * 1024;
 
 interface DevSessionBody {
   email?: unknown;
@@ -255,21 +264,71 @@ export function buildServer(options: BuildServerOptions = {}) {
   );
   const server = Fastify({
     logger: options.logger ?? process.env.NODE_ENV !== "test",
+    trustProxy: publicOrigin ? ["loopback", "linklocal", "uniquelocal"] : false,
+    requestIdHeader: false,
+    genReqId: () => randomUUID(),
     rewriteUrl: (request) => {
       const url = request.url ?? "/";
       return url.startsWith("/api/") ? url.slice("/api".length) : url;
     },
   });
 
+  if (options.rateLimit !== false) {
+    void server.register(rateLimit, {
+      global: false,
+    });
+    let globalRateLimiter: ReturnType<typeof server.rateLimit> | undefined;
+    let loginRateLimiter: ReturnType<typeof server.rateLimit> | undefined;
+    let signupRateLimiter: ReturnType<typeof server.rateLimit> | undefined;
+    server.after((error) => {
+      if (error) throw error;
+      globalRateLimiter = server.rateLimit({
+        max: 600,
+        timeWindow: "1 minute",
+      });
+      loginRateLimiter = server.rateLimit({
+        max: 30,
+        timeWindow: "1 minute",
+      });
+      signupRateLimiter = server.rateLimit({
+        max: 15,
+        timeWindow: "1 minute",
+      });
+    });
+    server.addHook("onRequest", async (request, reply) => {
+      const path = request.url.split("?", 1)[0];
+      if (path === "/health") return;
+      const limiter =
+        path === "/v1/auth/signup"
+          ? signupRateLimiter
+          : path === "/v1/auth/login"
+            ? loginRateLimiter
+            : globalRateLimiter;
+      if (limiter) await limiter.call(server, request, reply);
+    });
+  }
+
   server.addHook("onReady", async () => repository.initialize());
   server.addHook("onClose", async () => repository.close());
   server.addHook("onSend", async (request, reply, payload) => {
-    if (request.url.startsWith("/v1/")) reply.header("cache-control", "no-store");
+    reply.header("x-request-id", request.id);
+    reply.header(
+      "permissions-policy",
+      "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    );
+    if (secureCookies) {
+      reply.header("strict-transport-security", "max-age=31536000");
+    }
+    if (request.url.startsWith("/v1/"))
+      reply.header("cache-control", "no-store");
     if (request.url.split("?")[0] === "/v8-hosted.html") {
       reply.header("x-content-type-options", "nosniff");
       reply.header("referrer-policy", "no-referrer");
       reply.header("x-frame-options", "SAMEORIGIN");
-      reply.header("content-security-policy", "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads allow-modals");
+      reply.header(
+        "content-security-policy",
+        "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads allow-modals",
+      );
       return payload;
     }
     reply.header("x-content-type-options", "nosniff");
@@ -300,7 +359,7 @@ export function buildServer(options: BuildServerOptions = {}) {
     }
   });
 
-  server.setErrorHandler((error, _request, reply) => {
+  server.setErrorHandler((error, request, reply) => {
     const message =
       error instanceof Error
         ? error.message
@@ -329,62 +388,99 @@ export function buildServer(options: BuildServerOptions = {}) {
       return reply.code(409).send({ error: "identity_conflict", message });
     }
     if (
-      error instanceof RequestValidationError || error instanceof ClassicValidationError ||
+      error instanceof RequestValidationError ||
+      error instanceof ClassicValidationError ||
       message.startsWith("Invalid HuddleCanvas board document") ||
       message.startsWith("Board document id")
     ) {
       return reply.code(400).send({ error: "invalid_request", message });
     }
-    if ((error as { statusCode?: number }).statusCode === 413) return reply.code(413).send({ error: "too_large", message: "Workspace exceeds the 10 MB cloud save limit. Export a backup and reduce embedded images or checkpoints." });
-    server.log.error(error);
+    if ((error as { statusCode?: number }).statusCode === 429)
+      return reply.code(429).send({
+        error: "rate_limited",
+        message: "Too many requests. Try again shortly.",
+      });
+    if ((error as { statusCode?: number }).statusCode === 413)
+      return reply.code(413).send({
+        error: "too_large",
+        message:
+          "Workspace exceeds the 10 MB cloud save limit. Export a backup and reduce embedded images or checkpoints.",
+      });
+    server.log.error({ err: error, requestId: request.id }, "Request failed");
     return reply.code(500).send({
       error: "internal_error",
       message: "The request could not be completed.",
     });
   });
 
-  server.get("/health", async () => ({
-    status: "ok",
-    service: "huddlecanvas-api",
-    persistence: repository.persistenceKind,
-  }));
+  server.get("/health", async (_request, reply) => {
+    try {
+      await repository.checkHealth();
+      return {
+        status: "ok",
+        service: "huddlecanvas-api",
+        persistence: repository.persistenceKind,
+      };
+    } catch (error) {
+      server.log.error({ err: error }, "Persistence health check failed");
+      return reply.code(503).send({
+        status: "unavailable",
+        service: "huddlecanvas-api",
+        persistence: repository.persistenceKind,
+      });
+    }
+  });
 
   server.get("/v1/auth/config", async () => ({
     mode: browserOidc ? "oidc" : allowDevAuth ? "development" : "unavailable",
   }));
 
+  async function beginBrowserAuthorization(
+    returnTo: unknown,
+    reply: FastifyReply,
+    screenHint?: "signup",
+  ) {
+    if (!browserOidc || !publicOrigin) {
+      return reply.code(404).send({
+        error: "not_found",
+        message: "Hosted account access is not configured.",
+      });
+    }
+    const redirectUri = new URL(callbackPath, publicOrigin).href;
+    const authorization = await browserOidc.createAuthorizationRequest({
+      redirectUri,
+      returnTo: safeReturnTo(returnTo),
+      ...(screenHint ? { screenHint } : {}),
+    });
+    const transactionPath = callbackPath.slice(
+      0,
+      Math.max(callbackPath.lastIndexOf("/") + 1, 1),
+    );
+    reply.header(
+      "set-cookie",
+      cookie(
+        TRANSACTION_COOKIE,
+        transactionCodec.issue(authorization.transaction),
+        {
+          maxAge: 10 * 60,
+          path: transactionPath,
+          secure: Boolean(secureCookies),
+        },
+      ),
+    );
+    return reply.redirect(authorization.url);
+  }
+
   server.get<{ Querystring: { returnTo?: string } }>(
     "/v1/auth/login",
-    async (request, reply) => {
-      if (!browserOidc || !publicOrigin) {
-        return reply.code(404).send({
-          error: "not_found",
-          message: "Hosted sign-in is not configured.",
-        });
-      }
-      const redirectUri = new URL(callbackPath, publicOrigin).href;
-      const authorization = await browserOidc.createAuthorizationRequest({
-        redirectUri,
-        returnTo: safeReturnTo(request.query.returnTo),
-      });
-      const transactionPath = callbackPath.slice(
-        0,
-        Math.max(callbackPath.lastIndexOf("/") + 1, 1),
-      );
-      reply.header(
-        "set-cookie",
-        cookie(
-          TRANSACTION_COOKIE,
-          transactionCodec.issue(authorization.transaction),
-          {
-            maxAge: 10 * 60,
-            path: transactionPath,
-            secure: Boolean(secureCookies),
-          },
-        ),
-      );
-      return reply.redirect(authorization.url);
-    },
+    async (request, reply) =>
+      beginBrowserAuthorization(request.query.returnTo, reply),
+  );
+
+  server.get<{ Querystring: { returnTo?: string } }>(
+    "/v1/auth/signup",
+    async (request, reply) =>
+      beginBrowserAuthorization(request.query.returnTo, reply, "signup"),
   );
 
   server.get("/v1/auth/callback", async (request, reply) => {
@@ -530,16 +626,39 @@ export function buildServer(options: BuildServerOptions = {}) {
   });
 
   server.get("/v1/classic-workspace", async (request) => {
-    const identity = await identityFor(request, identityVerifier, signer, sessionCookieName, repository);
+    const identity = await identityFor(
+      request,
+      identityVerifier,
+      signer,
+      sessionCookieName,
+      repository,
+    );
     return repository.getClassicWorkspace(identity.userId);
   });
-  server.put<{ Body: { expectedRevision?: unknown; workspace?: unknown } }>("/v1/classic-workspace", { bodyLimit: CLASSIC_MAX_BYTES + 1024 }, async (request) => {
-    const identity = await identityFor(request, identityVerifier, signer, sessionCookieName, repository);
-    const revision = request.body?.expectedRevision;
-    if (!Number.isSafeInteger(revision) || (revision as number) < 0) throw new RequestValidationError("A valid expectedRevision is required.");
-    const workspace = validateClassicWorkspace(request.body?.workspace);
-    return repository.saveClassicWorkspace(identity.userId, revision as number, workspace);
-  });
+  server.put<{ Body: { expectedRevision?: unknown; workspace?: unknown } }>(
+    "/v1/classic-workspace",
+    { bodyLimit: CLASSIC_MAX_BYTES + 1024 },
+    async (request) => {
+      const identity = await identityFor(
+        request,
+        identityVerifier,
+        signer,
+        sessionCookieName,
+        repository,
+      );
+      const revision = request.body?.expectedRevision;
+      if (!Number.isSafeInteger(revision) || (revision as number) < 0)
+        throw new RequestValidationError(
+          "A valid expectedRevision is required.",
+        );
+      const workspace = validateClassicWorkspace(request.body?.workspace);
+      return repository.saveClassicWorkspace(
+        identity.userId,
+        revision as number,
+        workspace,
+      );
+    },
+  );
 
   server.get("/v1/workspaces", async (request) => {
     const identity = await identityFor(
@@ -674,6 +793,7 @@ export function buildServer(options: BuildServerOptions = {}) {
 
   server.put<{ Params: { boardId: string }; Body: SaveBoardBody }>(
     "/v1/boards/:boardId",
+    { bodyLimit: BOARD_DOCUMENT_MAX_BYTES },
     async (request) => {
       const identity = await identityFor(
         request,

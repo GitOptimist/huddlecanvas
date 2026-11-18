@@ -1,11 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 
-test("keeps the v8 shell usable on desktop and mobile", async ({
+test("keeps the canonical alpha shell usable on desktop and mobile", async ({
   page,
 }, testInfo) => {
   await page.goto("/?editor=alpha");
   await page.getByLabel("Display name").fill("Layout QA");
-  await page.getByLabel("Work email").fill(`layout-${Date.now()}@example.com`);
+  await page
+    .getByLabel("Work email")
+    .fill(`layout-${randomUUID()}@example.com`);
   await page.getByRole("button", { name: "Continue to workspace" }).click();
   const canvas = page.getByLabel("Canvas", { exact: true });
   await expect(canvas).toBeVisible();

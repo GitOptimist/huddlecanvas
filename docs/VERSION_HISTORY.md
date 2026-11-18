@@ -73,3 +73,16 @@ Historical files are for traceability and regression/reference. New feature work
 - Replaced v8 browser-local persistence in the hosted build with an authenticated full-workspace endpoint, per-account isolation, atomic revisions, explicit conflicts, save-before-sign-out, and downloadable failure backups.
 - Kept the canonical Hosted Alpha editor and its existing boards available under `/?editor=alpha`; no existing canonical board is converted or deleted.
 - Added API coverage for validation, file recovery, PostgreSQL recovery and conflicts, plus browser coverage for v8 save/reload and account isolation. The root v8 `index.html` remains unchanged.
+
+## M3.5.1 Hosted Alpha trust hardening
+
+- Added a direct hosted account-creation route using the existing OIDC Authorization Code + PKCE flow and provider signup hint.
+- Added server-generated request IDs, HSTS, Permissions-Policy and global/authentication rate limits while retaining the existing CSP, origin checks and secure cookie controls.
+- Updated Fastify and its vulnerable URI dependencies; the production dependency audit reports no known vulnerabilities.
+- Strengthened backward-compatible v8 workspace validation for cycles, nesting, cumulative node count, scalar length and unsafe numeric/geometry values without changing the database schema or converting boards.
+- Removed visible hosted entry points for unavailable collaboration and generic AI behavior; clarified account save, comment, personal reveal, export and storage-limit behavior.
+- Replaced visible timer/reset/command glyphs with standard SVG icons and added focus/accessibility treatment in the generated hosted bridge.
+- Expanded CI triggers and release gates to cover bridge scripts, the root prototype, Blueprint/lockfile changes, dependency audit and Chromium/Firefox/WebKit workflows.
+- Added a cross-functional readiness audit and an explicit staging/rollback gate. Realtime collaboration, invitations and the server-authoritative outcome loop remain M3.6–M3.7 work.
+- Prevented concurrent first-login identity rebinding, added bounded PostgreSQL readiness checks and made canonical object audit metadata server-owned.
+- Added nested canonical document limits plus mobile workspace navigation, accessible hosted dialogs, keyboard object selection/nudging and expanded browser assertions.

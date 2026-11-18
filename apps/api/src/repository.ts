@@ -1,6 +1,10 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { validateClassicWorkspace, type ClassicSnapshot } from "./classic-workspace.ts";
+import { isDeepStrictEqual } from "node:util";
+import {
+  validateClassicWorkspace,
+  type ClassicSnapshot,
+} from "./classic-workspace.ts";
 
 import {
   assertBoardDocument,
@@ -78,9 +82,14 @@ export type PersistenceKind = "memory" | "file" | "postgresql";
 
 export interface BoardRepositoryPort {
   getClassicWorkspace(userId: string): Promise<ClassicSnapshot>;
-  saveClassicWorkspace(userId: string, expectedRevision: number, workspace: Record<string, unknown>): Promise<ClassicSnapshot>;
+  saveClassicWorkspace(
+    userId: string,
+    expectedRevision: number,
+    workspace: Record<string, unknown>,
+  ): Promise<ClassicSnapshot>;
   readonly persistenceKind: PersistenceKind;
   initialize(): Promise<void>;
+  checkHealth(): Promise<void>;
   close(): Promise<void>;
   upsertUser(input: {
     email: string;
@@ -140,6 +149,44 @@ export function initialBoardDocument(input: {
     boardId: input.boardId,
     title,
   });
+}
+
+function objectContent(
+  object: BoardDocument["objects"][string],
+): Record<string, unknown> {
+  const content = { ...object } as Record<string, unknown>;
+  delete content.createdAt;
+  delete content.createdBy;
+  delete content.updatedAt;
+  delete content.updatedBy;
+  return content;
+}
+
+export function withServerOwnedObjectAudit(input: {
+  document: BoardDocument;
+  current: BoardDocument;
+  actorId: string;
+  timestamp: string;
+}): BoardDocument {
+  const next = structuredClone(input.document);
+  for (const [objectId, object] of Object.entries(next.objects)) {
+    const previous = input.current.objects[objectId];
+    if (previous) {
+      object.createdAt = previous.createdAt;
+      object.createdBy = previous.createdBy;
+      if (isDeepStrictEqual(objectContent(object), objectContent(previous))) {
+        object.updatedAt = previous.updatedAt;
+        object.updatedBy = previous.updatedBy;
+        continue;
+      }
+    } else {
+      object.createdAt = input.timestamp;
+      object.createdBy = input.actorId;
+    }
+    object.updatedAt = input.timestamp;
+    object.updatedBy = input.actorId;
+  }
+  return assertBoardDocument(next);
 }
 
 export class RepositoryNotFoundError extends Error {
@@ -263,20 +310,34 @@ export class BoardRepository implements BoardRepositoryPort {
 
   async getClassicWorkspace(userId: string): Promise<ClassicSnapshot> {
     await this.initialize();
-    const found = this.state.classicWorkspaces?.find((entry) => entry.userId === userId);
-    return found ? structuredClone({ revision: found.revision, workspace: found.workspace }) : { revision: 0, workspace: null };
+    const found = this.state.classicWorkspaces?.find(
+      (entry) => entry.userId === userId,
+    );
+    return found
+      ? structuredClone({
+          revision: found.revision,
+          workspace: found.workspace,
+        })
+      : { revision: 0, workspace: null };
   }
 
-  async saveClassicWorkspace(userId: string, expectedRevision: number, workspace: Record<string, unknown>): Promise<ClassicSnapshot> {
+  async saveClassicWorkspace(
+    userId: string,
+    expectedRevision: number,
+    workspace: Record<string, unknown>,
+  ): Promise<ClassicSnapshot> {
     const validated = validateClassicWorkspace(workspace);
     return this.mutate(() => {
-      if (!this.state.users.some((user) => user.id === userId)) throw new RepositoryNotFoundError("Account not found.");
-      const entries = this.state.classicWorkspaces ??= [];
+      if (!this.state.users.some((user) => user.id === userId))
+        throw new RepositoryNotFoundError("Account not found.");
+      const entries = (this.state.classicWorkspaces ??= []);
       const found = entries.find((entry) => entry.userId === userId);
       const revision = found?.revision ?? 0;
-      if (revision !== expectedRevision) throw new RepositoryConflictError(revision);
+      if (revision !== expectedRevision)
+        throw new RepositoryConflictError(revision);
       const next = { userId, revision: revision + 1, workspace: validated };
-      if (found) Object.assign(found, next); else entries.push(next);
+      if (found) Object.assign(found, next);
+      else entries.push(next);
       return { revision: next.revision, workspace: structuredClone(validated) };
     });
   }
@@ -298,6 +359,10 @@ export class BoardRepository implements BoardRepositoryPort {
       await this.storage.save(this.state);
     }
     this.initialized = true;
+  }
+
+  async checkHealth(): Promise<void> {
+    await this.initialize();
   }
 
   private async mutate<T>(operation: () => T): Promise<T> {
@@ -539,8 +604,14 @@ export class BoardRepository implements BoardRepositoryPort {
       }
       const updatedAt = now();
       const revision = board.revision + 1;
-      board.document = structuredClone(validated);
-      board.title = validated.title;
+      const secured = withServerOwnedObjectAudit({
+        document: validated,
+        current: board.document,
+        actorId: input.actorId,
+        timestamp: updatedAt,
+      });
+      board.document = structuredClone(secured);
+      board.title = secured.title;
       board.revision = revision;
       board.updatedAt = updatedAt;
       board.updatedBy = input.actorId;
@@ -548,7 +619,7 @@ export class BoardRepository implements BoardRepositoryPort {
         id: id("ver"),
         boardId: board.id,
         revision,
-        document: structuredClone(validated),
+        document: structuredClone(secured),
         createdAt: updatedAt,
         createdBy: input.actorId,
         reason: input.reason.trim() || "Autosave",

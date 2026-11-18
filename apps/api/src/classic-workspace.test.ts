@@ -13,6 +13,10 @@ import {
 import { PostgresBoardRepository } from "./postgres-repository.ts";
 import { SessionSigner } from "./auth.ts";
 import { buildServer, DEVELOPMENT_SECRET } from "./server.ts";
+import {
+  ClassicValidationError,
+  validateClassicWorkspace,
+} from "./classic-workspace.ts";
 
 const workspace = () => ({
   version: 8,
@@ -28,6 +32,85 @@ const workspace = () => ({
       versions: [],
     },
   ],
+});
+
+test("classic validation preserves supported and unknown v8 fields", () => {
+  const original = workspace();
+  Object.assign(original.boards[0]!, {
+    customPluginState: { retained: true },
+    items: [
+      {
+        id: "quiz-one",
+        type: "quiz",
+        x: 40,
+        y: 80,
+        question: "What did we decide?",
+        options: ["Ship", "Wait"],
+        votes: 2,
+        comments: [{ text: "@Alex please confirm" }],
+      },
+    ],
+    versions: [{ name: "Before workshop", snapshot: { items: [] } }],
+  });
+  const validated = validateClassicWorkspace(original);
+  assert.deepEqual(validated, original);
+  assert.notEqual(validated, original);
+});
+
+test("classic validation preserves image-heavy and dense workspaces within the existing byte limit", () => {
+  const imageHeavy = workspace();
+  imageHeavy.boards[0]!.media[0]!.src =
+    "data:image/png;base64," + "a".repeat(1_100_000);
+  assert.deepEqual(validateClassicWorkspace(imageHeavy), imageHeavy);
+
+  const dense = workspace() as unknown as {
+    version: number;
+    currentBoardId: string;
+    branding: Record<string, unknown>;
+    boards: Array<{
+      id: string;
+      title: string;
+      ops: unknown[];
+      items: unknown[];
+      media: unknown[];
+      versions: unknown[];
+    }>;
+  };
+  dense.boards[0]!.ops = Array.from({ length: 100_000 }, () => 0);
+  dense.boards[0]!.items = Array.from({ length: 100_000 }, () => 0);
+  dense.boards[0]!.media = Array.from({ length: 100_000 }, () => 0);
+  assert.doesNotThrow(() => validateClassicWorkspace(dense));
+});
+
+test("classic validation rejects unsafe numeric, scalar, and cyclic data", () => {
+  const invalidNumber = workspace();
+  Object.assign(invalidNumber.boards[0]!.items[0]!, { x: Number.NaN });
+  assert.throws(
+    () => validateClassicWorkspace(invalidNumber),
+    ClassicValidationError,
+  );
+
+  const extremeGeometry = workspace();
+  Object.assign(extremeGeometry.boards[0]!.items[0]!, { x: 1_000_001 });
+  assert.throws(
+    () => validateClassicWorkspace(extremeGeometry),
+    ClassicValidationError,
+  );
+
+  const oversizedString = workspace();
+  Object.assign(oversizedString.boards[0]!.items[0]!, {
+    text: "x".repeat(10 * 1024 * 1024 + 1),
+  });
+  assert.throws(
+    () => validateClassicWorkspace(oversizedString),
+    ClassicValidationError,
+  );
+
+  const cyclic = workspace() as ReturnType<typeof workspace> & {
+    cycle?: unknown;
+  };
+  cyclic.cycle = cyclic;
+  assert.throws(() => validateClassicWorkspace(cyclic), ClassicValidationError);
 });
 
 test("classic API requires auth, isolates accounts, validates payloads and rejects stale saves", async () => {

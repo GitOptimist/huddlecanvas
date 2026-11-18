@@ -1,4 +1,34 @@
 import { expect, test } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+
+test("offers a direct hosted signup entry", async ({ page }) => {
+  let signupRequest = "";
+  await page.route("**/api/v1/auth/config", (route) =>
+    route.fulfill({ json: { mode: "oidc" } }),
+  );
+  await page.route("**/api/v1/session", (route) =>
+    route.fulfill({
+      status: 401,
+      json: { error: "unauthenticated", message: "Sign in required" },
+    }),
+  );
+  await page.route("**/api/v1/auth/signup?*", (route) => {
+    signupRequest = route.request().url();
+    return route.fulfill({
+      contentType: "text/html",
+      body: "<!doctype html><title>Signup redirect captured</title>",
+    });
+  });
+
+  await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "Create account" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect
+    .poll(() => signupRequest)
+    .toContain("/api/v1/auth/signup?returnTo=%2F");
+});
 
 test("uses, persists, and recovers the hosted canvas", async ({ page }) => {
   await page.goto("/?editor=alpha");
@@ -11,7 +41,7 @@ test("uses, persists, and recovers the hosted canvas", async ({ page }) => {
   await page.getByLabel("Display name").fill("Hosted QA");
   await page
     .getByLabel("Work email")
-    .fill(`hosted-qa-${Date.now()}@example.com`);
+    .fill(`hosted-qa-${randomUUID()}@example.com`);
   await page.getByRole("button", { name: "Continue to workspace" }).click();
 
   const title = page.getByLabel("Board title");
@@ -101,7 +131,9 @@ test("selects, duplicates, moves, undoes and persists board objects", async ({
 }) => {
   await page.goto("/?editor=alpha");
   await page.getByLabel("Display name").fill("Parity QA");
-  await page.getByLabel("Work email").fill(`parity-${Date.now()}@example.com`);
+  await page
+    .getByLabel("Work email")
+    .fill(`parity-${randomUUID()}@example.com`);
   await page.getByRole("button", { name: "Continue to workspace" }).click();
 
   const canvas = page.getByLabel("Canvas", { exact: true });
@@ -165,7 +197,7 @@ test("resizes, rotates, locks and unlocks one object through canonical history",
   await page.getByLabel("Display name").fill("Transform QA");
   await page
     .getByLabel("Work email")
-    .fill(`transform-${Date.now()}@example.com`);
+    .fill(`transform-${randomUUID()}@example.com`);
   await page.getByRole("button", { name: "Continue to workspace" }).click();
 
   const canvas = page.getByLabel("Canvas", { exact: true });

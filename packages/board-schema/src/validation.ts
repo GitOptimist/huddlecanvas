@@ -33,18 +33,43 @@ const shapeKinds = new Set([
   "star",
 ]);
 
+const MAX_BOARD_OBJECTS = 10_000;
+const MAX_STROKE_POINTS = 200_000;
+const MAX_ID_LENGTH = 512;
+const MAX_TEXT_LENGTH = 100_000;
+const MAX_CANVAS_VALUE = 1_000_000;
+const MAX_ISSUES = 100;
+
+interface ValidationBudget {
+  strokePoints: number;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
+const isBoundedNumber = (
+  value: unknown,
+  maximum = MAX_CANVAS_VALUE,
+): value is number =>
+  isFiniteNumber(value) && Math.abs(value) <= maximum;
+
+const isBoundedString = (
+  value: unknown,
+  maximum = MAX_TEXT_LENGTH,
+): value is string =>
+  typeof value === "string" && value.length <= maximum;
+
 const add = (
   issues: ValidationIssue[],
   path: string,
   code: string,
   message: string,
-) => issues.push({ path, code, message });
+) => {
+  if (issues.length < MAX_ISSUES) issues.push({ path, code, message });
+};
 
 function validateEndpoint(
   value: unknown,
@@ -62,7 +87,7 @@ function validateEndpoint(
     return;
   }
   if (value.kind === "point") {
-    if (!isFiniteNumber(value.x) || !isFiniteNumber(value.y)) {
+    if (!isBoundedNumber(value.x) || !isBoundedNumber(value.y)) {
       add(
         issues,
         path,
@@ -73,7 +98,10 @@ function validateEndpoint(
     return;
   }
   if (value.kind === "binding") {
-    if (typeof value.objectId !== "string" || !objectIds.has(value.objectId)) {
+    if (
+      !isBoundedString(value.objectId, MAX_ID_LENGTH) ||
+      !objectIds.has(value.objectId)
+    ) {
       add(
         issues,
         `${path}.objectId`,
@@ -108,12 +136,15 @@ function validateObjectShape(
   key: string,
   objectIds: Set<ID>,
   issues: ValidationIssue[],
+  budget: ValidationBudget,
 ): value is BoardObject {
   const path = `objects.${key}`;
   if (!isRecord(value)) {
     add(issues, path, "invalid_object", "Board object must be a record.");
     return false;
   }
+  if (!isBoundedString(key, MAX_ID_LENGTH))
+    add(issues, path, "invalid_id", "Object id is too long.");
   if (value.id !== key)
     add(
       issues,
@@ -130,7 +161,10 @@ function validateObjectShape(
     );
     return false;
   }
-  if (value.parentId !== null && typeof value.parentId !== "string") {
+  if (
+    value.parentId !== null &&
+    !isBoundedString(value.parentId, MAX_ID_LENGTH)
+  ) {
     add(
       issues,
       `${path}.parentId`,
@@ -146,7 +180,11 @@ function validateObjectShape(
       "Parent object does not exist.",
     );
   }
-  if (typeof value.orderKey !== "string" || value.orderKey.length === 0) {
+  if (
+    typeof value.orderKey !== "string" ||
+    value.orderKey.length === 0 ||
+    value.orderKey.length > MAX_ID_LENGTH
+  ) {
     add(
       issues,
       `${path}.orderKey`,
@@ -163,7 +201,7 @@ function validateObjectShape(
     );
   } else {
     for (const field of ["x", "y", "rotation", "scaleX", "scaleY"] as const) {
-      if (!isFiniteNumber(value.transform[field])) {
+      if (!isBoundedNumber(value.transform[field])) {
         add(
           issues,
           `${path}.transform.${field}`,
@@ -172,7 +210,12 @@ function validateObjectShape(
         );
       }
     }
-    if (value.transform.scaleX === 0 || value.transform.scaleY === 0) {
+    if (
+      value.transform.scaleX === 0 ||
+      value.transform.scaleY === 0 ||
+      Math.abs(Number(value.transform.scaleX)) > 1_000 ||
+      Math.abs(Number(value.transform.scaleY)) > 1_000
+    ) {
       add(
         issues,
         `${path}.transform`,
@@ -183,8 +226,8 @@ function validateObjectShape(
   }
   if (
     !isRecord(value.size) ||
-    !isFiniteNumber(value.size.width) ||
-    !isFiniteNumber(value.size.height)
+    !isBoundedNumber(value.size.width) ||
+    !isBoundedNumber(value.size.height)
   ) {
     add(
       issues,
@@ -210,7 +253,11 @@ function validateObjectShape(
     "updatedAt",
     "updatedBy",
   ] as const) {
-    if (typeof value[field] !== "string" || value[field].length === 0) {
+    if (
+      typeof value[field] !== "string" ||
+      value[field].length === 0 ||
+      value[field].length > MAX_ID_LENGTH
+    ) {
       add(
         issues,
         `${path}.${field}`,
@@ -222,19 +269,58 @@ function validateObjectShape(
 
   switch (value.type) {
     case "stroke":
-      if (!Array.isArray(value.points) || value.points.length < 2)
+      if (!Array.isArray(value.points) || value.points.length < 2) {
         add(
           issues,
           `${path}.points`,
           "invalid_points",
           "A stroke needs at least two points.",
         );
-      if (!isRecord(value.style))
+      } else {
+        budget.strokePoints += value.points.length;
+        if (budget.strokePoints > MAX_STROKE_POINTS) {
+          add(
+            issues,
+            `${path}.points`,
+            "too_many_points",
+            "Board stroke point limit exceeded.",
+          );
+        }
+        value.points.forEach((point, index) => {
+          if (
+            !isRecord(point) ||
+            !isBoundedNumber(point.x) ||
+            !isBoundedNumber(point.y) ||
+            (point.pressure !== undefined &&
+              (!isFiniteNumber(point.pressure) ||
+                point.pressure < 0 ||
+                point.pressure > 1)) ||
+            (point.time !== undefined && !isBoundedNumber(point.time, 1e15))
+          ) {
+            add(
+              issues,
+              `${path}.points.${index}`,
+              "invalid_point",
+              "Stroke points require bounded coordinates and optional pressure/time values.",
+            );
+          }
+        });
+      }
+      if (
+        !isRecord(value.style) ||
+        !isBoundedString(value.style.color, 128) ||
+        !isFiniteNumber(value.style.width) ||
+        value.style.width <= 0 ||
+        value.style.width > 1_000 ||
+        !isFiniteNumber(value.style.opacity) ||
+        value.style.opacity < 0 ||
+        value.style.opacity > 1
+      )
         add(
           issues,
           `${path}.style`,
           "invalid_style",
-          "Stroke style is required.",
+          "Stroke style requires a color, positive width, and opacity from zero to one.",
         );
       break;
     case "shape":
@@ -245,19 +331,37 @@ function validateObjectShape(
           "invalid_shape",
           "Shape kind is not supported.",
         );
-      if (!isRecord(value.style))
+      if (
+        !isRecord(value.style) ||
+        !isBoundedString(value.style.stroke, 128) ||
+        !isFiniteNumber(value.style.strokeWidth) ||
+        value.style.strokeWidth < 0 ||
+        value.style.strokeWidth > 1_000 ||
+        (value.style.fill !== null &&
+          !isBoundedString(value.style.fill, 128)) ||
+        !isFiniteNumber(value.style.opacity) ||
+        value.style.opacity < 0 ||
+        value.style.opacity > 1
+      )
         add(
           issues,
           `${path}.style`,
           "invalid_style",
-          "Shape style is required.",
+          "Shape style contains invalid stroke, fill, width, or opacity values.",
         );
       break;
     case "text":
       if (
-        typeof value.text !== "string" ||
+        !isBoundedString(value.text) ||
         !isRecord(value.style) ||
-        typeof value.altText !== "string"
+        !isBoundedString(value.style.color, 128) ||
+        !isBoundedString(value.style.fontFamily, 256) ||
+        !isFiniteNumber(value.style.fontSize) ||
+        value.style.fontSize <= 0 ||
+        value.style.fontSize > 1_000 ||
+        ![400, 500, 600, 700, 800].includes(Number(value.style.fontWeight)) ||
+        !["left", "center", "right"].includes(String(value.style.textAlign)) ||
+        !isBoundedString(value.altText)
       )
         add(
           issues,
@@ -267,7 +371,7 @@ function validateObjectShape(
         );
       break;
     case "sticky":
-      if (typeof value.text !== "string" || typeof value.color !== "string")
+      if (!isBoundedString(value.text) || !isBoundedString(value.color, 128))
         add(
           issues,
           path,
@@ -277,8 +381,8 @@ function validateObjectShape(
       break;
     case "media":
       if (
-        typeof value.assetId !== "string" ||
-        typeof value.altText !== "string"
+        !isBoundedString(value.assetId, MAX_ID_LENGTH) ||
+        !isBoundedString(value.altText)
       )
         add(
           issues,
@@ -289,7 +393,7 @@ function validateObjectShape(
       break;
     case "action":
       if (
-        typeof value.title !== "string" ||
+        !isBoundedString(value.title) ||
         !["open", "in-progress", "done", "blocked"].includes(
           String(value.status),
         )
@@ -299,6 +403,16 @@ function validateObjectShape(
           path,
           "invalid_action",
           "Action title and status are required.",
+        );
+      if (
+        value.assigneeId !== undefined &&
+        !isBoundedString(value.assigneeId, MAX_ID_LENGTH)
+      )
+        add(
+          issues,
+          `${path}.assigneeId`,
+          "invalid_assignee",
+          "Action assignee id is invalid.",
         );
       if (
         value.dueAt !== undefined &&
@@ -313,7 +427,7 @@ function validateObjectShape(
         );
       break;
     case "checklist":
-      if (typeof value.title !== "string" || !Array.isArray(value.rows))
+      if (!isBoundedString(value.title) || !Array.isArray(value.rows))
         add(
           issues,
           path,
@@ -325,8 +439,8 @@ function validateObjectShape(
         value.rows.forEach((row, index) => {
           if (
             !isRecord(row) ||
-            typeof row.id !== "string" ||
-            typeof row.text !== "string" ||
+            !isBoundedString(row.id, MAX_ID_LENGTH) ||
+            !isBoundedString(row.text) ||
             typeof row.done !== "boolean"
           ) {
             add(
@@ -350,7 +464,7 @@ function validateObjectShape(
       break;
     case "quiz":
       if (
-        typeof value.prompt !== "string" ||
+        !isBoundedString(value.prompt) ||
         !Array.isArray(value.options) ||
         !["hidden", "revealed"].includes(String(value.answerPolicy))
       )
@@ -365,8 +479,8 @@ function validateObjectShape(
         value.options.forEach((option, index) => {
           if (
             !isRecord(option) ||
-            typeof option.id !== "string" ||
-            typeof option.text !== "string"
+            !isBoundedString(option.id, MAX_ID_LENGTH) ||
+            !isBoundedString(option.text)
           ) {
             add(
               issues,
@@ -418,9 +532,23 @@ function validateObjectShape(
           "invalid_routing",
           "Connector routing is not supported.",
         );
+      if (
+        !isRecord(value.style) ||
+        !isBoundedString(value.style.color, 128) ||
+        !isFiniteNumber(value.style.width) ||
+        value.style.width <= 0 ||
+        value.style.width > 1_000 ||
+        !["none", "arrow"].includes(String(value.style.endMarker))
+      )
+        add(
+          issues,
+          `${path}.style`,
+          "invalid_style",
+          "Connector style contains invalid color, width, or end marker values.",
+        );
       break;
     case "frame":
-      if (typeof value.title !== "string")
+      if (!isBoundedString(value.title))
         add(
           issues,
           `${path}.title`,
@@ -442,7 +570,7 @@ function validateObjectShape(
     case "group":
       if (
         !Array.isArray(value.childIds) ||
-        value.childIds.some((id) => typeof id !== "string")
+        value.childIds.some((id) => !isBoundedString(id, MAX_ID_LENGTH))
       )
         add(
           issues,
@@ -587,7 +715,11 @@ export function validateBoardDocument(
       "unsupported_schema",
       `Expected schema version ${CURRENT_SCHEMA_VERSION}.`,
     );
-  if (typeof input.boardId !== "string" || input.boardId.length === 0)
+  if (
+    typeof input.boardId !== "string" ||
+    input.boardId.length === 0 ||
+    input.boardId.length > MAX_ID_LENGTH
+  )
     add(issues, "boardId", "invalid_id", "Board id is required.");
   if (!Number.isInteger(input.generation) || Number(input.generation) < 0)
     add(
@@ -596,7 +728,7 @@ export function validateBoardDocument(
       "invalid_generation",
       "Generation must be a non-negative integer.",
     );
-  if (typeof input.title !== "string")
+  if (!isBoundedString(input.title, 500))
     add(issues, "title", "invalid_title", "Board title must be a string.");
   if (
     !isRecord(input.settings) ||
@@ -608,7 +740,7 @@ export function validateBoardDocument(
     const { background, snap } = input.settings;
     if (
       !["solid", "grid", "dots"].includes(String(background.kind)) ||
-      typeof background.color !== "string" ||
+      !isBoundedString(background.color, 128) ||
       background.color.length === 0
     )
       add(
@@ -620,7 +752,8 @@ export function validateBoardDocument(
     if (
       typeof snap.enabled !== "boolean" ||
       !isFiniteNumber(snap.gridSize) ||
-      snap.gridSize <= 0
+      snap.gridSize <= 0 ||
+      snap.gridSize > MAX_CANVAS_VALUE
     )
       add(
         issues,
@@ -636,9 +769,17 @@ export function validateBoardDocument(
       "invalid_objects",
       "Objects must be an id-keyed record.",
     );
+  else if (Object.keys(input.objects).length > MAX_BOARD_OBJECTS)
+    add(
+      issues,
+      "objects",
+      "too_many_objects",
+      `A board may contain at most ${MAX_BOARD_OBJECTS} objects.`,
+    );
   if (
     !Array.isArray(input.rootOrder) ||
-    input.rootOrder.some((id) => typeof id !== "string")
+    input.rootOrder.some((id) => !isBoundedString(id, MAX_ID_LENGTH)) ||
+    input.rootOrder.length > MAX_BOARD_OBJECTS
   )
     add(
       issues,
@@ -649,8 +790,9 @@ export function validateBoardDocument(
 
   if (isRecord(input.objects)) {
     const objectIds = new Set(Object.keys(input.objects));
+    const budget: ValidationBudget = { strokePoints: 0 };
     for (const [key, value] of Object.entries(input.objects))
-      validateObjectShape(value, key, objectIds, issues);
+      validateObjectShape(value, key, objectIds, issues, budget);
   }
 
   if (issues.length === 0)

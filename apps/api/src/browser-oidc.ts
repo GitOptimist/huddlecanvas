@@ -23,6 +23,7 @@ export interface BrowserOidcClient {
   createAuthorizationRequest(input: {
     redirectUri: string;
     returnTo: string;
+    screenHint?: "signup";
   }): Promise<{ url: string; transaction: OidcTransaction }>;
   completeAuthorization(input: {
     callbackUrl: string;
@@ -175,6 +176,7 @@ export class StandardOidcClient implements BrowserOidcClient {
   async createAuthorizationRequest(input: {
     redirectUri: string;
     returnTo: string;
+    screenHint?: "signup";
   }): Promise<{ url: string; transaction: OidcTransaction }> {
     const discovery = await this.discovery();
     const transaction: OidcTransaction = {
@@ -188,7 +190,7 @@ export class StandardOidcClient implements BrowserOidcClient {
       discovery.authorization_endpoint,
       "OIDC authorization endpoint",
     );
-    authorizationUrl.search = new URLSearchParams({
+    const parameters = new URLSearchParams({
       response_type: "code",
       client_id: this.clientId,
       redirect_uri: input.redirectUri,
@@ -197,7 +199,11 @@ export class StandardOidcClient implements BrowserOidcClient {
       code_challenge_method: "S256",
       state: transaction.state,
       nonce: transaction.nonce,
-    }).toString();
+    });
+    if (input.screenHint === "signup") {
+      parameters.set("screen_hint", "signup");
+    }
+    authorizationUrl.search = parameters.toString();
     return { url: authorizationUrl.href, transaction };
   }
 

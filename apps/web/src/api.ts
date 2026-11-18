@@ -58,6 +58,11 @@ export function hostedLoginUrl(returnTo = "/"): string {
   return `${API_BASE}/v1/auth/login?${query.toString()}`;
 }
 
+export function hostedSignupUrl(returnTo = "/"): string {
+  const query = new URLSearchParams({ returnTo });
+  return `${API_BASE}/v1/auth/signup?${query.toString()}`;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -132,9 +137,15 @@ export function getClassicWorkspace(token?: string) {
   return request<ClassicSnapshot>("/v1/classic-workspace", { token });
 }
 
-export function saveClassicWorkspace(token: string | undefined, expectedRevision: number, workspace: Record<string, unknown>) {
+export function saveClassicWorkspace(
+  token: string | undefined,
+  expectedRevision: number,
+  workspace: Record<string, unknown>,
+) {
   return request<ClassicSnapshot>("/v1/classic-workspace", {
-    token, method: "PUT", body: JSON.stringify({ expectedRevision, workspace }),
+    token,
+    method: "PUT",
+    body: JSON.stringify({ expectedRevision, workspace }),
   });
 }
 

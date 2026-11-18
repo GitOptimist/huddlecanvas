@@ -30,6 +30,7 @@ import {
   getSession,
   importV8Board,
   hostedLoginUrl,
+  hostedSignupUrl,
   listBoards,
   listVersions,
   restoreVersion,
@@ -173,6 +174,10 @@ function SignInScreen({
     window.location.assign(hostedLoginUrl("/"));
   }
 
+  function beginHostedSignUp() {
+    window.location.assign(hostedSignupUrl("/"));
+  }
+
   return (
     <main className="sign-in-shell">
       <section className="sign-in-story" aria-label="HuddleCanvas introduction">
@@ -181,18 +186,18 @@ function SignInScreen({
           <span className="story-kicker">Early access</span>
           <h1>Turn workshop ideas into action.</h1>
           <p>
-            Capture ideas, agree on priorities, assign next steps, and return to
-            the same board whenever your team needs it.
+            Capture ideas, agree on priorities, record owners and next steps,
+            and return to the same board whenever you need it.
           </p>
           <div className="story-proof">
             <span>
               <Icon name="cloud" /> Boards save automatically
             </span>
             <span>
-              <Icon name="history" /> Recover earlier versions
+              <Icon name="history" /> Create restore checkpoints
             </span>
             <span>
-              <Icon name="shield" /> Private team workspace
+              <Icon name="shield" /> Private account workspace
             </span>
           </div>
         </div>
@@ -252,8 +257,7 @@ function SignInScreen({
             <span className="alpha-badge">Early access</span>
             <h2>Welcome to HuddleCanvas</h2>
             <p>
-              Sign in to open your workspace and continue where your team left
-              off.
+              Sign in to open your workspace and continue where you left off.
             </p>
             {feedback ? (
               <div
@@ -264,13 +268,22 @@ function SignInScreen({
               </div>
             ) : null}
             {authMode === "oidc" ? (
-              <button
-                className="primary-action"
-                type="button"
-                onClick={beginHostedSignIn}
-              >
-                Sign in <Icon name="arrow" />
-              </button>
+              <div className="auth-actions">
+                <button
+                  className="primary-action"
+                  type="button"
+                  onClick={beginHostedSignIn}
+                >
+                  Sign in <Icon name="arrow" />
+                </button>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={beginHostedSignUp}
+                >
+                  Create account <Icon name="plus" />
+                </button>
+              </div>
             ) : (
               <div className="form-error" role="alert">
                 Staging sign-in has not been configured yet.
@@ -456,7 +469,10 @@ export default function App() {
           throw new Error("No workspace is available for this account.");
         setIdentity(session.identity);
         setWorkspaceAccess(access);
-        if (new URLSearchParams(window.location.search).get("editor") !== "alpha") return;
+        if (
+          new URLSearchParams(window.location.search).get("editor") !== "alpha"
+        )
+          return;
         const availableBoards = await refreshBoardList(access, sessionToken);
         if (cancelled) return;
         const first = availableBoards[0];
@@ -1120,6 +1136,17 @@ export default function App() {
     resetEditHistory(null);
   }
 
+  function openHostedWorkspace() {
+    if (
+      (dirty || saving.current) &&
+      !window.confirm(
+        "This board still has unsaved changes. Return to the hosted workspace anyway?",
+      )
+    )
+      return;
+    window.location.assign("/");
+  }
+
   useEffect(() => {
     function keyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -1175,12 +1202,14 @@ export default function App() {
   }
 
   if (new URLSearchParams(window.location.search).get("editor") !== "alpha") {
-    return <ClassicWorkspace
-      key={identity.userId}
-      token={token || undefined}
-      identity={identity}
-      onSignOut={signOut}
-    />;
+    return (
+      <ClassicWorkspace
+        key={identity.userId}
+        token={token || undefined}
+        identity={identity}
+        onSignOut={signOut}
+      />
+    );
   }
 
   const saveLabel = {
@@ -1289,6 +1318,11 @@ export default function App() {
             </button>
           </div>
         ) : null}
+        <div className="v8-import-entry">
+          <button type="button" onClick={openHostedWorkspace}>
+            Open hosted workspace
+          </button>
+        </div>
         <small className="sidebar-ownership">HuddleCanvas · by GETITECH</small>
         <div className="sidebar-footer">
           <span className="avatar">{initials(identity.displayName)}</span>
