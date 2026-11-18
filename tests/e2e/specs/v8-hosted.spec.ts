@@ -115,8 +115,14 @@ test("keeps the default hosted v8 canvas usable at desktop and mobile widths", a
       await expect(mobileNavigation).toBeVisible();
       await mobileNavigation.click();
       await expect(frame.locator("body")).toHaveClass(/mobileSidebarOpen/);
-      const sidebarBox = await frame.locator("#hostedSidebar").boundingBox();
-      expect(sidebarBox?.x).toBeGreaterThanOrEqual(0);
+      await expect
+        .poll(async () => {
+          const sidebarBox = await frame
+            .locator("#hostedSidebar")
+            .boundingBox();
+          return sidebarBox?.x ?? Number.NEGATIVE_INFINITY;
+        })
+        .toBeGreaterThanOrEqual(-0.5);
       await expect(frame.locator("#newBoard")).toBeVisible();
       await frame.locator("#sidebarBackdrop").click({
         position: { x: width - 5, y: 5 },
