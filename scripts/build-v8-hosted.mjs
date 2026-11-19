@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { parseVideoSource } from "./video-source.mjs";
 
 const root = new URL("../", import.meta.url);
 const source = await readFile(new URL("index.html", root), "utf8");
@@ -282,6 +283,48 @@ replaceDocument(
   '<button class="commandItem" data-command="focus">◫ Toggle focus mode</button>',
   '<button class="commandItem" data-command="focus"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg> Toggle focus mode</button>',
 );
+replaceDocument('<button class="commandItem" data-command="new">', '<button class="commandItem" data-command="video">Add video link</button><button class="commandItem" data-command="new">');
+replace("if(c==='new')newBoard();", "if(c==='video')addVideoLink();if(c==='new')newBoard();");
+replace("function renderItems(){", parseVideoSource.toString() + `
+function addVideoLink(){
+ const dialog=document.createElement('dialog'),form=document.createElement('form');
+ const label=document.createElement('label'),input=document.createElement('input');
+ label.textContent='YouTube or Vimeo video URL ';input.type='url';input.required=true;label.append(input);
+ const add=document.createElement('button'),cancel=document.createElement('button');
+ add.textContent='Add to board';cancel.textContent='Cancel';cancel.type='button';
+ form.append(label,add,cancel);dialog.append(form);dialog.setAttribute('aria-label','Add video link');document.body.append(dialog);
+ cancel.onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();input.oninput=()=>input.setCustomValidity('');
+ form.onsubmit=e=>{e.preventDefault();const source=parseVideoSource(input.value);
+ if(!source){input.setCustomValidity('Enter a supported HTTPS YouTube or Vimeo video link.');input.reportValidity();return}
+ hist();const wrap=document.getElementById('boardWrap').getBoundingClientRect(),world=objects.getBoundingClientRect();
+ const scale=objects.offsetWidth ? world.width/objects.offsetWidth : 1;
+ current().items.push({id:id(),type:'video',url:source.embedUrl,x:(wrap.left+wrap.width/2-world.left)/(scale||1)-140,y:(wrap.top+wrap.height/2-world.top)/(scale||1)-80,w:280,h:192});
+ dialog.close();renderItems();save()};dialog.showModal();input.focus()
+}
+function renderItems(){`);
+replace("current().items.forEach(item=>{\n if(item.type==='sticky')", `current().items.forEach(item=>{
+ if(item.type==='video'){
+ const source=parseVideoSource(item.url),card=document.createElement('div'),header=document.createElement('div'),play=document.createElement('button');
+ card.className='actionCard canvasItem';card.dataset.id=item.id;card.style.left=item.x+'px';card.style.top=item.y+'px';card.style.width='280px';
+ header.className='objtop';header.textContent=source?'Video · '+source.provider:'Unsupported video';
+ play.textContent='Load video';play.disabled=!source;
+ play.onclick=()=>{if(!source)return;const player=document.createElement('iframe');player.title=source.provider+' video';player.src=source.embedUrl;player.width='260';player.height='150';play.replaceWith(player)};
+ header.classList.add('dragHandle');card.append(header,play);objects.appendChild(card);dragBind(card,item,header)}
+ if(item.type==='sticky')`);
+const boardCss = await readFile(new URL("./hosted-board.css", import.meta.url), "utf8");
+replaceDocument("</style>", boardCss + "\n</style>");
+replaceDocument("Presentation frame — creates a persistent slide region", "Presentation frame: create a slide region");
+replaceDocument("Vote mode — choose up to 5 objects", "Vote for up to 5 objects");
+replaceDocument('data-command="video">Add video link', 'data-command="video"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="m10 8 6 4-6 4z" fill="currentColor"/></svg>Add video link');
+for (const [from,to] of [
+  ["Objects grouped — move one to move the whole group","Objects grouped. Drag any member to move the group."],
+  ["Object locked — use Arrange to unlock it","Object locked. Open Arrange to unlock it."],
+  ["Checklist added — edit the title and rows directly","Checklist added. Edit the title or a row."],
+  ["Clipboard text is unavailable — use Ctrl/Cmd + V instead","Clipboard unavailable. Paste with Ctrl+V or Command+V."],
+  ["Personal reveal mode ON — new stickies will be masked on this account","Personal reveal is on. New sticky notes are hidden on this account."],
+  ["it.owner||'—'","it.owner||'Unassigned'"],["it.due||'—'","it.due||'Not set'"],
+  ["'Open'} — ","'Open'}: "]
+]) replace(from,to);
 await writeFile(new URL("assets/v8-hosted.js", root), script);
 await writeFile(new URL("assets/v8-hosted.html", root), hostedDocument);
 console.log(
