@@ -327,7 +327,7 @@ export function buildServer(options: BuildServerOptions = {}) {
       reply.header("x-frame-options", "SAMEORIGIN");
       reply.header(
         "content-security-policy",
-        "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads allow-modals",
+        "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads allow-modals",
       );
       return payload;
     }

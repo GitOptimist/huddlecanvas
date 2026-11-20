@@ -1403,7 +1403,7 @@ export default function App() {
             </span>
             <span className="role-badge">{role}</span>
             <span className="revision-label">
-              Revision {activeBoard?.revision ?? "—"}
+              {activeBoard ? `Revision ${activeBoard.revision}` : "No revision yet"}
             </span>
             <button
               className={

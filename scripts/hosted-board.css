@@ -1,0 +1,22 @@
+/* Board controls only. Do not override the typography of authored content. */
+.sidebar,.topbar,.toolrail,.command,.toolPopover {
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:0.9375rem;
+  line-height:1.4;
+}
+:is(.sidebar,.topbar,.command,.toolPopover) :is(input,button,select) {font-family:inherit}
+.boardOpen {text-align:start}
+.boardName,.commandItem {font-size:0.9375rem;font-weight:550}
+.topbar,.toolrail,.command,.toolPopover {
+  border-color:#d9dce5;
+  box-shadow:0 2px 6px rgb(26 26 56 / 9%),0 1px 2px rgb(26 26 56 / 5%);
+}
+.toolrail {max-height:calc(100dvh - 148px);overflow-y:auto;gap:3px}
+.toolrail .tool {flex-shrink:0;color:#343545}
+.toolrail .tool.active {color:#312e81;background:#eeeafd;box-shadow:inset 3px 0 #6256d9}
+.toolrail .tool svg {width:21px;height:21px}
+.commandItem {display:flex;align-items:center;gap:.625rem;min-height:42px}
+.commandItem svg {flex:none}
+:is(button,input,textarea,select,[tabindex]):focus-visible {outline:3px solid #5042bf;outline-offset:2px}
+@media(pointer:coarse){.toolrail .tool {min-width:44px;min-height:44px}}
+@media(prefers-reduced-motion:reduce){.sidebar,.tool,.commandItem {transition:none!important}}
