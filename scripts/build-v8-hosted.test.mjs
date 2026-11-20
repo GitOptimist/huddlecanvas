@@ -95,3 +95,47 @@ test("hosted build preserves v8 capabilities while exposing only truthful hosted
     cwd: root,
   });
 });
+
+for (const action of ["Clear board", "Clear ink"]) {
+  test(action + " confirms without form submission and cancel preserves content", async () => {
+    const { runInNewContext } = await import("node:vm");
+    await exec(process.execPath, ["scripts/build-v8-hosted.mjs"], { cwd: root });
+    const source = await readFile(new URL("assets/v8-hosted.js", root), "utf8");
+    const dialogs = source.slice(source.indexOf("function hostedDialog"), source.indexOf("const hostedPrompt"));
+    const reset = source.match(/async function resetBoardContent\(\).*?return true}/)[0];
+    const inkHandler = source.split("document.getElementById('clearInkBtn').onclick=")[1].split(";document.getElementById('clearBoardBtn')")[0];
+    const invoke = action === "Clear board" ? reset + ";resetBoardContent()" : "(" + inkHandler + ")()";
+    for (const accept of [false, true]) {
+      const elements = [];
+      const document = {
+        body: { append() {} },
+        createElement(tag) {
+          const events = {};
+          const node = {
+            tag, style: {}, append() {}, remove() {}, focus() {},
+            addEventListener(name, fn) { events[name] = fn; },
+            showModal() { this.open = true; },
+            close(value) { this.returnValue = value; this.open = false; events.close(); },
+          };
+          elements.push(node);
+          return node;
+        },
+      };
+      const board = { name: "Workshop", background: "grid", items: ["frame"], ops: ["pen", "highlighter"], media: ["image"] };
+      const calls = [];
+      const result = runInNewContext(dialogs + invoke, {
+        document, current: () => board, selectedIds: new Set(), selectedMedia: null,
+        hist: () => calls.push("history"), setTool() {}, renderBoard() {}, redraw: () => calls.push("redraw"),
+        save: () => calls.push("save"), toast() {},
+      });
+      const button = elements.find(node => node.textContent === (accept ? "OK" : "Cancel"));
+      assert.equal(button.type, "button");
+      button.onclick();
+      await result;
+      assert.deepEqual([board.items.length, board.ops.length, board.media.length], accept ? (action === "Clear ink" ? [1, 0, 1] : [0, 0, 0]) : [1, 2, 1]);
+      assert.deepEqual(calls, accept ? (action === "Clear ink" ? ["history", "redraw", "save"] : ["history", "save"]) : []);
+      assert.equal(board.name, "Workshop");
+      assert.equal(board.background, "grid");
+    }
+  });
+}

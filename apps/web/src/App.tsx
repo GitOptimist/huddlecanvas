@@ -181,7 +181,7 @@ function SignInScreen({
   return (
     <main className="sign-in-shell">
       <section className="sign-in-story" aria-label="HuddleCanvas introduction">
-        <ProductBrand />
+        <ProductBrand inverse />
         <div className="story-copy">
           <span className="story-kicker">Early access</span>
           <h1>

@@ -29,10 +29,10 @@
 @media(pointer:coarse){.toolrail .tool {min-width:44px;min-height:44px}}
 @media(prefers-reduced-motion:reduce){.sidebar,.tool,.commandItem {transition:none!important}}
 
-/* A two-column instrument palette keeps the complete tool names in view. */
+/* Keep the labeled tools in a single scrollable column. */
 .toolrail {
   display:grid;
-  grid-template-columns:repeat(2,60px);
+  grid-template-columns:60px;
   gap:3px;
   padding:6px;
   background:linear-gradient(150deg,#fbfcfff5,#e1e6f1e8);
@@ -56,7 +56,7 @@
   .toolrail .tool:not(.active):hover {background:#fff;color:#322952}
 }
 .toolrail .tool::after {display:none}
-.shapePopover,.toolPopover {left:154px}
+.shapePopover,.toolPopover {left:92px}
 @media(max-width:600px) {
   .toolrail {grid-template-columns:54px;max-height:calc(100dvh - 158px)}
   .shapePopover,.toolPopover {left:82px;max-width:calc(100vw - 94px)}
@@ -146,3 +146,187 @@
     background:#f7f8fc;backdrop-filter:none;
   }
 }
+
+/* Keep selection actions compact and allow the Arrange menu to extend below them. */
+#selectionBar {
+  width: max-content;
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px !important;
+  padding: 5px !important;
+  border: 1px solid #cbd0df !important;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(27 30 56 / 14%) !important;
+  font-family: system-ui, sans-serif;
+}
+#selectionBar::before { content: none; }
+#selectionBar > .selCount {
+  color: #514783;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#selectionBar > button {
+  min-height: 32px;
+  padding-inline: 8px;
+  background: transparent;
+  color: #303449;
+  font: 600 12px/1 system-ui, sans-serif !important;
+}
+#selectionBar > .transformBtn { background: #f1f2f7; font-size: 16px !important; }
+#selectionBar > .commentBtn { background: #eeecfb; color: #483c92; }
+#selectionBar > .selDanger { color: #9c3541; }
+#selectionBar > button:hover { background: #e5e7ef; }
+#selectionBar > .selDanger:hover { background: #fbe8ea; }
+#selectionBar button:focus-visible { outline: 2px solid #5144ac; outline-offset: -2px; }
+#selectionBar .arrangeMenu { max-width: 100%; }
+@media (pointer: coarse) {
+  #selectionBar > button { min-width: 44px; min-height: 44px; }
+}
+
+/* Reserve the right end of the footer for canvas navigation. */
+.properties {
+  left: 12px;
+  right: 244px;
+  width: max-content;
+  max-width: calc(100% - 256px);
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border-radius: 12px;
+  background: #fff;
+}
+.properties .range { flex: none; font: 500 12px/1.3 system-ui,sans-serif; }
+.properties #sizeLabel {
+  padding: 3px 5px;
+  text-align: center;
+  background: #f1effa;
+  border-radius: 5px;
+  color: #463b80;
+}
+.strokeSample { width: 32px; height: 26px; border: 0; }
+.pasteHint {
+  bottom: 84px;
+  padding: 4px 8px;
+  color: #545a69;
+  background: #fff;
+  border-radius: 7px;
+  white-space: nowrap;
+  font: 12px/1.5 system-ui,sans-serif;
+}
+.pasteHint kbd {
+  margin-inline-start: 4px;
+  font: inherit;
+  color: #453c72;
+  background: #f1eff8;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.zoom {
+  padding: 4px;
+  gap: 2px;
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgb(35 38 58 / 12%);
+}
+.zoom button { width: 36px; height: 36px; border-radius: 8px; }
+.zoom .zoomDivider { display: none; }
+.zoom #zoomLabel { min-width: 46px; font: 600 13px/1 system-ui,sans-serif; font-variant-numeric: tabular-nums; }
+.zoom button:focus-visible,.properties input:focus-visible { outline: 2px solid #5144ac; outline-offset: -2px; }
+@media (max-width: 850px) {
+  .properties { left: 10px; right: 10px; max-width: calc(100% - 20px); }
+  .pasteHint { display: none; }
+}
+
+.toolrail {
+  display: flex;
+  flex-direction: column;
+  width: 76px;
+  box-sizing: border-box;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+}
+.paletteControls { display: flex; flex: none; justify-content: center; gap: 2px; }
+.paletteControls button {
+  width: 28px; height: 28px; border: 0; border-radius: 6px;
+  color: #433d64; background: transparent; font: 600 18px/1 system-ui;
+}
+.paletteControls button:first-child { cursor: grab; touch-action: none; }
+.paletteControls button:first-child:active { cursor: grabbing; }
+.paletteControls button:hover,.paletteControls button[aria-pressed=true] { background: #dfdaf5; }
+.paletteControls button:focus-visible { outline: 2px solid #5745ae; outline-offset: -2px; }
+.paletteTools { display: grid; gap: 3px; overflow: auto; min-height: 0; scrollbar-width: thin; }
+.toolrail.horizontalPalette { width: max-content; flex-direction: row; align-items: stretch; }
+.horizontalPalette .paletteControls { flex-direction: column; }
+.horizontalPalette .paletteTools { grid-auto-flow: column; grid-auto-columns: 60px; align-items: center; min-width: 0; }
+
+#manageBoardsModal .modal {
+  background: #fff;
+  border: 1px solid #ced4e1;
+  border-radius: 16px;
+  padding: clamp(16px, 3vw, 28px);
+  font: 400 14px/1.45 system-ui, sans-serif;
+  color: #252b40;
+  max-height: 92dvh;
+  overflow: auto;
+}
+#manageBoardsModal h2 { margin: 0; font: 650 24px/1.2 system-ui, sans-serif; letter-spacing: -.025em; }
+#manageBoardsModal p { margin: 5px 0 18px; color: #535e72; font: inherit; }
+#manageBoardsModal .manageToolbar { background: #f4f5fa; flex-wrap: wrap; border-radius: 9px; }
+#manageBoardsModal label { display: inline-flex; align-items: center; gap: 6px; }
+#manageBoardsModal #bulkBoardCount,#manageBoardsModal .manageMeta { font: 400 12px/1.45 system-ui, sans-serif; color: #546075; }
+#manageBoardsModal button { font: 550 13px/1.2 system-ui, sans-serif; }
+#manageBoardsModal button:disabled { color: #707789; background: #f3f4f7; border-color: #dce0e8; cursor: default; }
+#manageBoardsModal .manageList { gap: 0; }
+#manageBoardsModal .manageRow {
+  grid-template-columns: auto minmax(0,1fr) auto !important;
+  padding: 12px 9px;
+  border: 0;
+  border-bottom: 1px solid #e1e5ed;
+  border-radius: 0;
+}
+#manageBoardsModal .manageRow.active { background: #f4f2ff; box-shadow: inset 3px 0 #6256d9; }
+#manageBoardsModal .manageName { font: 600 15px/1.4 system-ui, sans-serif; }
+#manageBoardsModal .manageActions { flex-wrap: wrap; }
+#manageBoardsModal .manageActions button { border-color: transparent; background: transparent; color: #465168; }
+#manageBoardsModal .manageActions [data-a="open"] { color: #44378e; background: #efedfa; }
+#manageBoardsModal .manageActions .danger { color: #963747; }
+#manageBoardsModal .manageActions button:hover { background: #e9eaf3; }
+#manageBoardsModal :is(button,input):focus-visible { outline: 2px solid #5144ac; outline-offset: 1px; }
+#manageBoardsModal .workshopHint { margin-top: 12px; font: 400 12px/1.5 system-ui,sans-serif; color: #596478; }
+@media (max-width: 620px) {
+  #manageBoardsModal .manageRow { grid-template-columns: auto minmax(0,1fr) !important; gap: 5px 10px; }
+  #manageBoardsModal .manageActions { grid-column: 2; }
+  #manageBoardsModal .manageToolbar { gap: 6px; }
+}
+@media (pointer: coarse) {
+  #manageBoardsModal button { min-height: 44px; }
+}
+
+#backgroundModal .modal {
+  width: min(480px, 100%); max-height: 92dvh; overflow: auto;
+  padding: clamp(16px, 3vw, 24px); background: white;
+  color: #272c40; border-radius: 16px; font-family: system-ui,sans-serif;
+}
+#backgroundModal h2 { margin: 0; font: 650 23px/1.2 system-ui,sans-serif; }
+#backgroundModal p { margin: 6px 0 18px; color: #566174; font: 400 14px/1.45 system-ui,sans-serif; }
+#backgroundModal .canvasChoices { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+#backgroundModal .canvasChoice {
+  position: relative; padding: 7px; border: 1px solid #d8dce6;
+  background: white; border-radius: 10px; color: #32394d;
+}
+#backgroundModal .canvasChoice b { font: 550 13px/1.4 system-ui,sans-serif; }
+#backgroundModal .sample { height: 32px; border-radius: 5px; }
+#backgroundModal .canvasChoice.active { border-color: #6757bb; background: #f5f3ff; box-shadow: inset 0 0 0 1px #6757bb; }
+#backgroundModal .canvasChoice.active::after {
+  content: "✓"; position: absolute; top: 11px; right: 11px; border-radius: 50%;
+  background: #493c90; color: white; width: 19px; height: 19px;
+  display: grid; place-items: center; font: 700 13px/1 system-ui; border: 1px solid white;
+}
+#backgroundModal .canvasCustom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#backgroundModal .canvasCustom label { margin-right: auto; font: 550 14px/1.4 system-ui,sans-serif; }
+#backgroundModal .customBgPreview { min-width: 0; height: auto; border: 0; background: none; color: #525c70; font: 13px/1.4 monospace; }
+#backgroundModal .btn { font: 550 14px/1.4 system-ui,sans-serif; }
+#backgroundModal :is(button,input):focus-visible { outline: 2px solid #5144ac; outline-offset: 2px; }
+@media(max-width:420px) { #backgroundModal .canvasChoices { grid-template-columns: repeat(2,minmax(0,1fr)); } }

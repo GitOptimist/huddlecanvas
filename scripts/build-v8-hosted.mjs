@@ -1,3 +1,4 @@
+import { installPaletteLayout } from "./palette-layout.mjs";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseVideoSource } from "./video-source.mjs";
@@ -23,6 +24,27 @@ function replaceDocument(pattern, replacement) {
     throw new Error(`hosted document anchor missing: ${pattern}`);
   hostedDocument = next;
 }
+// Media lives on a canvas layer, so draw and hit-test its grip in board coordinates.
+replace("pctx.strokeRect(it.x-4/scale,it.y-4/scale,it.w+8/scale,it.h+8/scale);", `$&
+ const grip=12/scale, left=it.x+it.w-grip/2, top=it.y+it.h-grip/2;
+ pctx.setLineDash([]);pctx.fillStyle='white';
+ pctx.fillRect(left,top,grip,grip);pctx.strokeRect(left,top,grip,grip);`);
+replace("const m=mediaHit(p);", `const selected=current().media?.find(image=>image.id===selectedMedia);
+ const radius=(e.pointerType==='touch'?20:10)/scale;
+ const resize=selected && Math.abs(p.x-selected.x-selected.w)<=radius && Math.abs(p.y-selected.y-selected.h)<=radius;
+ const m=resize?selected:mediaHit(p);`);
+replace("mediaDrag={id:m.id,start:p,x:m.x,y:m.y}", "mediaDrag={id:m.id,start:p,x:m.x,y:m.y,w:m.w,h:m.h,resize}");
+replace("m.x=mediaDrag.x+(p.x-mediaDrag.start.x);m.y=mediaDrag.y+(p.y-mediaDrag.start.y);", `const dx=p.x-mediaDrag.start.x,dy=p.y-mediaDrag.start.y;
+ if(mediaDrag.resize){
+   const {w,h}=mediaDrag;
+   const factor=Math.max(12/Math.max(w,h),1+(dx*w+dy*h)/(w*w+h*h));
+   m.w=w*factor;m.h=h*factor;
+ }else{m.x=mediaDrag.x+dx;m.y=mediaDrag.y+dy;}`);
+replace("panning=false;mediaDrag=null;if(lasso)", `panning=false;
+ if(mediaDrag){const image=current().media.find(it=>it.id===mediaDrag.id);
+   if(image){const {x,y,w,h}=mediaDrag;Object.assign(image,{x,y,w,h});renderMedia()}
+   mediaDrag=null;
+ }if(lasso)`);
 replace(
   /^function save\(\).*$/m,
   `function save(){current().updated=Date.now();renderBoardList();parent.postMessage({type:'huddle:save',workspace:ws},'*')}`,
@@ -101,30 +123,36 @@ script = script
   .replaceAll("confirm(", "await hostedConfirm(")
   .replaceAll("prompt(", "await hostedPrompt(")
   .replaceAll("alert(", "await hostedAlert(");
+for (const anchor of [
+    'Delete “${b.title}”? This cannot be undone.',
+    "Delete ${selectedBoardIds.size} selected board${selectedBoardIds.size===1?'':'s'}? This cannot be undone.",
+  ]) {
+    replace("hostedConfirm(`" + anchor + "`)", "hostedConfirm(`" + anchor + "`, 'Delete')");
+}
 const dialogs = `
-function hostedDialog(message,value,kind){return new Promise(resolve=>{
+function hostedDialog(message,value,kind,acceptLabel='OK'){return new Promise(resolve=>{
  const dialog=document.createElement('dialog');dialog.style.cssText='max-width:440px;border:1px solid #ddd;border-radius:14px;padding:24px;color:#222;background:white';
- const form=document.createElement('form');form.method='dialog';const label=document.createElement('label');label.textContent=message;label.style.display='block';form.append(label);
+ const form=document.createElement('div');const label=document.createElement('label');label.textContent=message;label.style.display='block';form.append(label);
  const input=document.createElement('input');if(kind==='prompt'){input.value=value||'';input.style.cssText='display:block;width:100%;margin:16px 0';label.append(input)}
  const close=value=>{if(dialog.open)dialog.close(value)};
  if(kind!=='alert'){const cancel=document.createElement('button');cancel.textContent='Cancel';cancel.value='cancel';cancel.type='button';cancel.onclick=()=>close('cancel');form.append(cancel)}
- const ok=document.createElement('button');ok.textContent='OK';ok.value='ok';ok.type='submit';form.addEventListener('submit',event=>{event.preventDefault();close('ok')});form.append(ok);dialog.append(form);document.body.append(dialog);
+ const ok=document.createElement('button');ok.textContent=acceptLabel;ok.value='ok';ok.type='button';ok.onclick=()=>close('ok');input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();close('ok')}});form.append(ok);dialog.append(form);document.body.append(dialog);
  dialog.addEventListener('close',()=>{const accepted=dialog.returnValue==='ok';dialog.remove();resolve(kind==='prompt'?(accepted?input.value:null):accepted)},{once:true});
- dialog.showModal();if(kind==='prompt')input.focus();else ok.focus();
+ dialog.showModal();if(kind==='prompt')input.focus();else if(acceptLabel==='Delete')form.querySelector('button').focus();else ok.focus();
 })}
-const hostedConfirm=message=>hostedDialog(message,'','confirm');
+const hostedConfirm=(message,acceptLabel)=>hostedDialog(message,'','confirm',acceptLabel);
 const hostedPrompt=(message,value)=>hostedDialog(message,value,'prompt');
 const hostedAlert=message=>hostedDialog(message,'','alert');
 function improveHostedAccessibility(bridge){
  document.querySelectorAll('button[title]').forEach(button=>{if(!button.getAttribute('aria-label'))button.setAttribute('aria-label',button.title)});
- const rail=document.querySelector('.toolrail');if(rail){rail.setAttribute('role','toolbar');rail.setAttribute('aria-label','Canvas tools')}
+ const rail=document.querySelector('.toolrail');if(rail){rail.setAttribute('role','toolbar');rail.setAttribute('aria-label','Canvas tools');(${installPaletteLayout.toString()})(rail)}
  const canvas=document.getElementById('boardWrap');if(canvas){canvas.setAttribute('role','region');canvas.setAttribute('aria-label','Canvas workspace');canvas.tabIndex=0}
  document.querySelectorAll('.modalShade').forEach((shade,index)=>{const heading=shade.querySelector('h2');shade.setAttribute('role','dialog');shade.setAttribute('aria-modal','true');shade.setAttribute('aria-hidden',shade.classList.contains('show')?'false':'true');if(heading){if(!heading.id)heading.id='hosted-dialog-title-'+index;shade.setAttribute('aria-labelledby',heading.id)}const modal=shade.querySelector('.modal');if(modal)modal.tabIndex=-1});
  let lastDialogTrigger=null;
  const baseToggleModal=bridge.toggleModal;
- const hostedToggleModal=function(id,on=true){const shade=document.getElementById(id);if(!shade)return;if(on)lastDialogTrigger=document.activeElement;baseToggleModal(id,on);shade.setAttribute('aria-hidden',on?'false':'true');if(on){queueMicrotask(()=>{const target=shade.querySelector('input:not([type="hidden"]),textarea,button,[tabindex]:not([tabindex="-1"])')||shade.querySelector('.modal');target?.focus()})}else if(lastDialogTrigger?.isConnected){lastDialogTrigger.focus()}};
+ const hostedToggleModal=function(id,on=true){const shade=document.getElementById(id);if(!shade)return;if(id==='backgroundModal'&&!on)document.getElementById('boardWrap').style.setProperty('--board-bg',bridge.current().background||'#ffffff');if(on)lastDialogTrigger=document.activeElement;baseToggleModal(id,on);shade.setAttribute('aria-hidden',on?'false':'true');if(on){queueMicrotask(()=>{const target=shade.querySelector('input:not([type="hidden"]),textarea,button,[tabindex]:not([tabindex="-1"])')||shade.querySelector('.modal');target?.focus()})}else if(lastDialogTrigger?.isConnected){lastDialogTrigger.focus()}};
  function activeHostedDialog(){return Array.from(document.querySelectorAll('.modalShade.show')).at(-1)}
- document.addEventListener('keydown',event=>{const modal=activeHostedDialog();if(event.key==='Escape'&&modal){event.preventDefault();event.stopImmediatePropagation();hostedToggleModal(modal.id,false);return}if(event.key!=='Tab'||!modal)return;const focusable=Array.from(modal.querySelectorAll('button:not([disabled]),input:not([disabled]):not([type="hidden"]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])')).filter(node=>node.getClientRects().length);if(!focusable.length)return;const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}},true);
+ document.addEventListener('keydown',event=>{if(document.querySelector('dialog[open]'))return;const modal=activeHostedDialog();if(event.key==='Escape'&&modal){event.preventDefault();event.stopImmediatePropagation();hostedToggleModal(modal.id,false);return}if(event.key!=='Tab'||!modal)return;const focusable=Array.from(modal.querySelectorAll('button:not([disabled]),input:not([disabled]):not([type="hidden"]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])')).filter(node=>node.getClientRects().length);if(!focusable.length)return;const first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}},true);
  const sidebarButton=document.getElementById('mobileSidebarBtn'),sidebarBackdrop=document.getElementById('sidebarBackdrop'),sidebar=document.querySelector('.sidebar');
  function setMobileSidebar(open){document.body.classList.toggle('mobileSidebarOpen',open);sidebarButton?.setAttribute('aria-expanded',String(open));sidebarBackdrop?.setAttribute('aria-hidden',String(!open));if(open)queueMicrotask(()=>sidebar?.querySelector('button')?.focus());else sidebarButton?.focus()}
  sidebarButton?.addEventListener('click',()=>setMobileSidebar(!document.body.classList.contains('mobileSidebarOpen')));sidebarBackdrop?.addEventListener('click',()=>setMobileSidebar(false));
@@ -353,6 +381,31 @@ replace("sizeInput.oninput=()=>sizeLabel.textContent=sizeInput.value;", `sizeInp
  sizeLabel.textContent=sizeInput.value;
  document.querySelector('.strokeSample path').setAttribute('stroke-width',sizeInput.value);
 };sizeInput.oninput();`);
+replaceDocument('Tip: paste images or text with Ctrl/Cmd + V, then draw over images', 'Paste text or images <kbd>Ctrl / ⌘ + V</kbd>');
+replaceDocument('<span>Stroke</span>', '<label for="size">Stroke</label>');
+replaceDocument('<div class="zoom">', '<div class="zoom" role="group" aria-label="Canvas view">');
+for (const [id, label] of [["zoomOut", "Zoom out"], ["zoomIn", "Zoom in"], ["resetView", "Reset view"]]) {
+  replaceDocument('<button id="' + id + '"', '<button aria-label="' + label + '" id="' + id + '"');
+}
+replaceDocument("Select one or many boards for bulk actions, or manage a single board inline.", "Select boards to duplicate or delete them together.");
+replaceDocument('id="bulkBoardCount" style="font-size:10px;color:#7b8390"', 'id="bulkBoardCount" role="status"');
+replace("function updateBulkBoardUI(){", `function updateBulkBoardUI(){
+ for(const id of ['bulkDuplicateBoards','bulkDeleteBoards'])document.getElementById(id).disabled=selectedBoardIds.size===0;`);
+replace("row.querySelector('.manageName').textContent=b.title;", `$&
+ row.querySelector('.manageCheck').setAttribute('aria-label','Select '+b.title);
+ row.querySelector('.manageName').title=b.title;`);
+replaceDocument("White is the classic default, but the workspace can adapt to workshops, presentations and low-light sessions.", "Choose a colour for this board.");
+replaceDocument('<input id="canvasCustomColor"', '<label for="canvasCustomColor">Custom colour</label><input id="canvasCustomColor"');
+replaceDocument('<span class="modalSubtle">Live preview · White remains one click away.</span>', '');
+replaceDocument('<button id="applyCanvasCustom" class="btn">Apply custom color</button>', '<button id="applyCanvasCustom" class="btn">Apply</button>');
+replace("customBg.onchange=()=>setCanvasBackground(customBg.value);", "customBg.onchange=customBg.oninput;");
+replace("b=>b.classList.toggle('active',(current()?.background||'#ffffff').toLowerCase()===b.dataset.bg.toLowerCase())", `b=>{
+ const chosen=(current()?.background||'#ffffff').toLowerCase()===b.dataset.bg.toLowerCase();
+ b.classList.toggle('active',chosen);b.setAttribute('aria-pressed',String(chosen))
+}`);
+replace("document.getElementById('customBgPreview').style.background=c.value;", "document.getElementById('customBgPreview').textContent=c.value.toUpperCase();");
+replace("document.getElementById('customBgPreview').style.background=customBg.value", "document.getElementById('customBgPreview').textContent=customBg.value.toUpperCase()");
+replace("document.getElementById('customBgPreview').style.background=bg;", "customBg.value=bg;document.getElementById('customBgPreview').textContent=bg.toUpperCase();");
 const boardCss = await readFile(new URL("./hosted-board.css", import.meta.url), "utf8");
 replaceDocument("</style>", boardCss + "\n</style>");
 replaceDocument("Presentation frame — creates a persistent slide region", "Presentation frame: create a slide region");
