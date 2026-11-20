@@ -13,7 +13,15 @@
 }
 .toolrail {max-height:calc(100dvh - 148px);overflow-y:auto;gap:3px}
 .toolrail .tool {flex-shrink:0;color:#343545}
-.toolrail .tool.active {color:#312e81;background:#eeeafd;box-shadow:inset 3px 0 #6256d9}
+.toolrail .tool.active {color:#fff;background:#40368e;box-shadow:inset 3px 0 currentColor}
+.toolrail .tool:focus-visible {outline:2px solid currentColor;outline-offset:-4px}
+@media (hover:hover) {
+  .toolrail .tool:not(.active):hover {background:#efeff5;color:#262538}
+}
+@media (forced-colors:active) {
+  .toolrail .tool.active {border:3px solid Highlight}
+  .toolrail .tool:focus-visible {outline:2px dashed ButtonText;outline-offset:-6px}
+}
 .toolrail .tool svg {width:21px;height:21px}
 .commandItem {display:flex;align-items:center;gap:.625rem;min-height:42px}
 .commandItem svg {flex:none}
