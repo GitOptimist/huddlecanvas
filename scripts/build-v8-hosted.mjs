@@ -287,14 +287,15 @@ replaceDocument('<button class="commandItem" data-command="new">', '<button clas
 replace("if(c==='new')newBoard();", "if(c==='video')addVideoLink();if(c==='new')newBoard();");
 replace("function renderItems(){", parseVideoSource.toString() + `
 function addVideoLink(){
- const dialog=document.createElement('dialog'),form=document.createElement('form');
+ const dialog=document.createElement('dialog'),form=document.createElement('div');
  const label=document.createElement('label'),input=document.createElement('input');
  label.textContent='YouTube or Vimeo video URL ';input.type='url';input.required=true;label.append(input);
  const add=document.createElement('button'),cancel=document.createElement('button');
  add.textContent='Add to board';cancel.textContent='Cancel';cancel.type='button';
  form.append(label,add,cancel);dialog.append(form);dialog.setAttribute('aria-label','Add video link');document.body.append(dialog);
  cancel.onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();input.oninput=()=>input.setCustomValidity('');
- form.onsubmit=e=>{e.preventDefault();const source=parseVideoSource(input.value);
+ input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add.click()}};
+ add.onclick=()=>{if(!input.reportValidity())return;const source=parseVideoSource(input.value);
  if(!source){input.setCustomValidity('Enter a supported HTTPS YouTube or Vimeo video link.');input.reportValidity();return}
  hist();const wrap=document.getElementById('boardWrap').getBoundingClientRect(),world=objects.getBoundingClientRect();
  const scale=objects.offsetWidth ? world.width/objects.offsetWidth : 1;
