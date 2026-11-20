@@ -181,25 +181,41 @@ function SignInScreen({
   return (
     <main className="sign-in-shell">
       <section className="sign-in-story" aria-label="HuddleCanvas introduction">
-        <ProductBrand inverse />
+        <ProductBrand />
         <div className="story-copy">
           <span className="story-kicker">Early access</span>
-          <h1>Turn workshop ideas into action.</h1>
+          <h1>
+            <span>Turn workshop ideas</span>{" "}
+            <span>into action.</span>
+          </h1>
           <p>
             Capture ideas, agree on priorities, record owners and next steps,
             and return to the same board whenever you need it.
           </p>
-          <div className="story-proof">
-            <span>
-              <Icon name="cloud" /> Boards save automatically
-            </span>
-            <span>
-              <Icon name="history" /> Create restore checkpoints
-            </span>
-            <span>
-              <Icon name="shield" /> Private account workspace
-            </span>
-          </div>
+          <ul className="story-proof" aria-label="Workspace features">
+            <li>
+              <svg viewBox="0 0 32 32" aria-hidden="true">
+                <path d="M14 23H9a6 6 0 0 1-1-12 8 8 0 0 1 15-1 6 6 0 0 1 4 10"/>
+                <path d="m17 22 3 3 7-8"/>
+              </svg>
+              Automatic saves
+            </li>
+            <li>
+              <svg viewBox="0 0 32 32" aria-hidden="true">
+                <path d="M7 9V5h19v18h-4M4 10h17v17H4z"/>
+                <path d="M8 17a5 5 0 1 1 1 6m-1-9v4h4"/>
+              </svg>
+              Restore points
+            </li>
+            <li>
+              <svg viewBox="0 0 32 32" aria-hidden="true">
+                <path d="M16 26H4V6h23v8M4 11h23"/>
+                <rect x="18" y="19" width="11" height="9" rx="2"/>
+                <path d="M20 19v-2a3.5 3.5 0 0 1 7 0v2"/>
+              </svg>
+              Private workspace
+            </li>
+          </ul>
         </div>
         <p className="story-boundary">
           Private preview · HuddleCanvas is being tested with a small group of

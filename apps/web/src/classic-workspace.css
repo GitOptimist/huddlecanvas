@@ -64,3 +64,23 @@
     display: none;
   }
 }
+
+.classic-account {
+  color:#263047;background:linear-gradient(165deg,#fafcff,#e2e6f1);border-color:#cad0df;box-shadow:inset 0 1px white;
+  font:500 13px/1.4 "Segoe UI",Arial,sans-serif;
+  min-height:44px;padding:6px 16px;
+}
+.classic-account strong {color:#312e61;font-size:16px;letter-spacing:-.025em}
+.classic-account small {color:#534d70;font-size:11px;letter-spacing:.02em}
+.classic-account [role=status] {display:flex;align-items:center;gap:7px;color:#39455a}
+.classic-account [role=status]::before {content:"";width:8px;height:8px;border-radius:50%;background:#cfb975;flex:none}
+.classic-account [data-state=saved]::before {background:#217754}
+.classic-account [data-state=error]::before {background:#b54741}
+.classic-email {color:#49556d;overflow:hidden;text-overflow:ellipsis}
+.classic-account button {background:#ffffff9c;color:#34324c;border-color:#bfc5d7;box-shadow:inset 0 1px white,0 1px 3px #35415a12;border-radius:8px;font:inherit}
+.classic-account button:hover:enabled {background:white}
+.classic-account button:focus-visible {outline:2px solid #61569a;outline-offset:2px}
+@media(prefers-reduced-motion:no-preference) {
+  .classic-account [data-state=saving]::before {animation:save-pulse 1s ease-in-out infinite alternate}
+  @keyframes save-pulse {to{opacity:.45}}
+}

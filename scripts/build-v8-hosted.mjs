@@ -312,6 +312,47 @@ replace("current().items.forEach(item=>{\n if(item.type==='sticky')", `current()
  play.onclick=()=>{if(!source)return;const player=document.createElement('iframe');player.title=source.provider+' video';player.src=source.embedUrl;player.width='260';player.height='150';play.replaceWith(player)};
  header.classList.add('dragHandle');card.append(header,play);objects.appendChild(card);dragBind(card,item,header)}
  if(item.type==='sticky')`);
+// Keep the original controls and event targets while replacing their artwork.
+const toolArtwork = [
+  ["select", "Select", "M5 3l14 9-7 1-3 7z"],
+  ["pen", "Pen", "M4 20l2-7L16 3l5 5-10 10z M6 13l5 5 M14 5l5 5"],
+  ["highlighter", "Highlight", "M5 15l8-11 6 4-8 11z M5 15l-2 4 5 1 M13 21h8"],
+  ["eraser", "Erase", "M3 14l10-11 8 7-10 11H9z M8 9l8 7 M11 21h10"],
+  ["line", "Line", "M6 17L18 7 M3 17h4v4H3z M17 3h4v4h-4z"],
+  ["shapesBtn", "Shapes", "M3 5h11v11H3z M14 11a5 5 0 1 1-5 5"],
+  ["frame", "Frame", "M3 9V4h5 M16 4h5v5 M21 15v5h-5 M8 20H3v-5 M7 8h10v8H7z"],
+  ["text", "Text", "M3 19L9 4l6 15 M5 14h8 M16 10h6 M19 10v9"],
+  ["sticky", "Note", "M4 3h16v11l-6 7H4z M14 21v-7h6 M8 8h8 M8 11h5"],
+  ["stamp", "Marker", "M5 15h14l2 4H3z M9 15v-3c0-2-2-3-2-5a5 5 0 0 1 10 0c0 2-2 3-2 5v3 M5 22h14"],
+  ["action", "Action", "M5 21V3 M5 4h14l-3 4 3 4H5 M12 18l3 3 6-7"],
+  ["checklist", "Checklist", "M3 6l2 2 4-5 M12 6h9 M3 15l2 2 4-5 M12 15h9"],
+  ["vote", "Vote", "M4 14h3l2 3h6l2-3h3l1 7H3z M8 8l5-6 6 5-5 6z"],
+  ["pan", "Pan", "M12 2v20 M2 12h20 M8 6l4-4 4 4 M8 18l4 4 4-4 M6 8l-4 4 4 4 M18 8l4 4-4 4"],
+];
+for (const [tool, label, path] of toolArtwork) {
+  const attribute = tool === "shapesBtn" ? 'id="shapesBtn"' : 'data-tool="' + tool + '"';
+  const original = new RegExp('(<button [^>]*' + attribute + '[^>]*>)<svg[^>]*>[\\s\\S]*?</svg>');
+  replaceDocument(original, '$1<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg><span class="toolLabel">' + label + '</span>');
+}
+replaceDocument('<div class="properties">', '<div class="properties" role="group" aria-label="Drawing controls">');
+replaceDocument('id="customColor" type', 'id="customColor" aria-label="Choose custom ink color" title="Custom ink color" type');
+replaceDocument('id="size" type', 'id="size" aria-label="Stroke width" type');
+replaceDocument('<b id="sizeLabel">4</b>', '<b id="sizeLabel">4</b><svg class="strokeSample" viewBox="0 0 48 36" aria-hidden="true"><path d="M11 23Q23 9 37 15" fill="none" stroke="currentColor" stroke-linecap="round"/></svg>');
+replaceDocument(/(<button class="penPreset"[^>]*>)<svg[^]*?<\/svg>/g,
+  '$1<svg class="penBody" viewBox="0 0 22 44" fill="none" aria-hidden="true"><path d="M5 42V17L8 9h6l3 8v25z" fill="currentColor"/><path d="M8 9l3-8 3 8z" fill="#27243a"/><path d="M7 18h8M7 21h8" stroke="white" opacity=".72"/><path d="M8 25v13" stroke="white" opacity=".32" stroke-linecap="round"/></svg>');
+const syncPreset = `const pressed=tool==='pen' && p.dataset.pen.toLowerCase()===color.toLowerCase();
+  p.classList.toggle('active',pressed);p.setAttribute('aria-pressed',String(pressed));`;
+replace("p=>p.classList.toggle('active',t==='pen'&&p.dataset.pen.toLowerCase()===color.toLowerCase())", "p=>{" + syncPreset + "}");
+replace("function renderPalette(){paletteEl.innerHTML='';", `function renderPalette(){
+ document.querySelectorAll('.penPreset').forEach(p=>{${syncPreset}});
+ document.querySelector('.strokeSample').style.color=color;
+ paletteEl.innerHTML='';`);
+replace("x.style.background=c;x.onclick", "x.style.background=c;x.setAttribute('aria-label','Ink '+c);x.title='Ink '+c;x.setAttribute('aria-pressed',String(x.classList.contains('active')));x.onclick");
+replace("renderPalette()};paletteEl.appendChild(x)", "renderPalette();Array.from(paletteEl.children).find(button=>button.getAttribute('aria-pressed')==='true')?.focus({preventScroll:true})};paletteEl.appendChild(x)");
+replace("sizeInput.oninput=()=>sizeLabel.textContent=sizeInput.value;", `sizeInput.oninput=()=>{
+ sizeLabel.textContent=sizeInput.value;
+ document.querySelector('.strokeSample path').setAttribute('stroke-width',sizeInput.value);
+};sizeInput.oninput();`);
 const boardCss = await readFile(new URL("./hosted-board.css", import.meta.url), "utf8");
 replaceDocument("</style>", boardCss + "\n</style>");
 replaceDocument("Presentation frame — creates a persistent slide region", "Presentation frame: create a slide region");

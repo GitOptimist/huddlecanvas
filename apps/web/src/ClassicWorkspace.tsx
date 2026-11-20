@@ -163,7 +163,7 @@ export function ClassicWorkspace({
         <strong>
           HuddleCanvas <small>Hosted Alpha</small>
         </strong>
-        <span role="status">{status}</span>
+        <span role="status" data-state={error ? "error" : status === "Saved to your account" ? "saved" : status === "Saving…" ? "saving" : "pending"}>{status}</span>
         <span className="classic-email">{identity.email}</span>
         <button
           disabled={leaving}
